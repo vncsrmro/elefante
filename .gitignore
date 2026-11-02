@@ -1,0 +1,20 @@
+node_modules
+out
+dist
+dist*/
+*.log
+.DS_Store
+.elefante
+.wrangler
+
+# Videos & Heavy media
+*.mp4
+*.mov
+*.webm
+docs/*.mp4
+
+# Marketing landing page & site
+site/
+
+# Artifacts & tests
+scripts/shots/

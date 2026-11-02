@@ -1,0 +1,137 @@
+{
+  "name": "elefante",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Elefante: seu orquestrador de agentes de IA — por Vinicius Romeiro",
+  "author": "Vinicius Romeiro <vinicius@romei.ro>",
+  "license": "Apache-2.0",
+  "type": "module",
+  "main": "out/main/index.js",
+  "scripts": {
+    "dev": "electron-vite dev",
+    "build": "electron-vite build",
+    "start": "electron-vite preview",
+    "server": "node out/main/server.js",
+    "typecheck": "tsc --noEmit -p tsconfig.json",
+    "test": "vitest run",
+    "dist": "sh scripts/dist.sh",
+    "dist:win": "npm run build && electron-builder --win nsis --x64 --publish never",
+    "install-app": "npm run dist && sh scripts/install-app.sh",
+    "release": "sh scripts/release.sh"
+  },
+  "devDependencies": {
+    "@types/node": "^26.6.5",
+    "@types/react": "^19.3.0",
+    "@types/react-dom": "^19.3.0",
+    "@vitejs/plugin-react": "^6.1.2",
+    "electron": "^44.8.0",
+    "electron-builder": "^26.15.3",
+    "electron-vite": "^6.0.0",
+    "playwright": "^1.64.1",
+    "react": "^19.3.1",
+    "react-dom": "^19.3.1",
+    "react-markdown": "^10.1.0",
+    "remark-gfm": "^4.0.1",
+    "typescript": "^7.0.2",
+    "vite": "^8.3.4",
+    "vitest": "^4.1.12"
+  },
+  "dependencies": {
+    "@fontsource-variable/inter": "^5.3.0",
+    "@modelcontextprotocol/sdk": "^1.32.1",
+    "electron-updater": "^6.8.11",
+    "gsap": "^3.14.2",
+    "smol-toml": "^1.9.1"
+  },
+  "build": {
+    "appId": "com.viniciusromeiro.elefante",
+    "productName": "Elefante",
+    "toolsets": {
+      "appimage": "1.0.3"
+    },
+    "publish": null,
+    "directories": {
+      "output": "dist",
+      "buildResources": "build"
+    },
+    "files": [
+      "out/**",
+      "package.json"
+    ],
+    "mac": {
+      "target": [
+        "dir"
+      ],
+      "category": "public.app-category.productivity",
+      "icon": "build/icon.icns",
+      "hardenedRuntime": true,
+      "entitlements": "build/entitlements.mac.plist",
+      "entitlementsInherit": "build/entitlements.mac.plist",
+      "notarize": false,
+      "extendInfo": {
+        "NSAppleEventsUsageDescription": "Elefante opens the Terminal for you when you ask it to."
+      }
+    },
+    "win": {
+      "target": [
+        "nsis"
+      ],
+      "icon": "build/icon.ico",
+      "signExecutable": false,
+      "artifactName": "elefante-win-${arch}.${ext}"
+    },
+    "nsis": {
+      "oneClick": true,
+      "perMachine": false,
+      "shortcutName": "Elefante"
+    },
+    "linux": {
+      "target": [
+        {
+          "target": "deb",
+          "arch": [
+            "x64",
+            "arm64"
+          ]
+        },
+        {
+          "target": "AppImage",
+          "arch": [
+            "x64",
+            "arm64"
+          ]
+        }
+      ],
+      "category": "Utility",
+      "icon": "build/icon.png",
+      "executableName": "elefante",
+      "artifactName": "elefante-linux-${arch}.${ext}",
+      "maintainer": "Vinicius Romeiro <vinicius@romei.ro>",
+      "synopsis": "Seu orquestrador de agentes de IA",
+      "description": "Elefante: seu orquestrador de agentes de IA — por Vinicius Romeiro."
+    },
+    "deb": {
+      "recommends": [
+        "gnome-keyring"
+      ]
+    },
+    "extraResources": [
+      {
+        "from": "build/sounds",
+        "to": "sounds"
+      },
+      {
+        "from": "build/tray.png",
+        "to": "tray.png"
+      },
+      {
+        "from": "build/icon.png",
+        "to": "icon.png"
+      },
+      {
+        "from": "build/icon.ico",
+        "to": "icon.ico"
+      }
+    ]
+  }
+}
