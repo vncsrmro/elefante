@@ -43,34 +43,14 @@ function NavItem({ view, icon, label, badge }: { view: View; icon: IconName; lab
 // Visual badge for each project folder, inspired by Orca's clean repo/folder badges.
 function ProjectGlyph({ name, hasFolder }: { name: string; hasFolder: boolean }): ReactNode {
   const lower = name.toLowerCase()
-  if (lower.includes('romeiro') || lower.includes('stival') || lower.includes('cuqui') || lower.includes('video-shield') || lower.includes('recebidos') || lower.includes('accanto')) {
-    return (
-      <span className="proj-badge proj-badge--lime" aria-hidden>
-        r<sup style={{ fontSize: '7px' }}>•</sup>
-      </span>
-    )
-  }
-  if (lower.includes('paperx')) {
-    return (
-      <span className="proj-badge proj-badge--emerald" aria-hidden>
-        PX
-      </span>
-    )
-  }
-  if (lower.includes('marcen') || lower.includes('verse')) {
-    return (
-      <span className="proj-badge proj-badge--light" aria-hidden>
-        M
-      </span>
-    )
-  }
-  if (lower.includes('ia local') || lower.includes('elefante')) {
+  if (lower.includes('elefante')) {
     return <TucaMark size={16} />
   }
   if (hasFolder) {
+    const letters = name.replace(/[^a-zA-Z0-9]/g, '').slice(0, 2).toUpperCase()
     return (
       <span className="proj-badge proj-badge--folder" aria-hidden>
-        <Icon name="folder" size={14} />
+        {letters || <Icon name="folder" size={14} />}
       </span>
     )
   }

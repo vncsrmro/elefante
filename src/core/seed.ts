@@ -1,10 +1,9 @@
-import { existsSync } from 'node:fs'
 import { randomUUID } from 'node:crypto'
 import { L } from '../shared/lang'
 import type { Agent } from '../shared/types'
 import type { Db } from './db'
 
-// First run: a team of agents and the user's real project folders (or sample projects).
+// First run: a team of agents and starter channels.
 export function seed(db: Db): void {
   const agent = (a: Omit<Agent, 'id' | 'used' | 'grants' | 'memory' | 'computer' | 'archived'>): Agent => ({
     ...a,
@@ -56,44 +55,10 @@ export function seed(db: Db): void {
     limit: 2_000_000
   })
 
-  const realProjects: Array<{ name: string; path: string }> = [
-    { name: 'Stival', path: 'E:\\romeiro.dev\\Stival' },
-    { name: 'paperx', path: 'E:\\romeiro.dev\\PaperX\\paperx' },
-    { name: 'CUQUI', path: 'E:\\romeiro.dev\\CUQUI' },
-    { name: 'video-shield', path: 'C:\\Users\\vncs\\orca\\video-shield' },
-    { name: 'IA LOCAL', path: 'D:\\IA LOCAL' },
-    { name: 'Recebidos do Bem', path: 'E:\\romeiro.dev\\Recebidos do Bem' },
-    { name: 'marcen', path: 'E:\\romeiro.dev\\MARCEN\\marcen' },
-    { name: 'Verse-Haven', path: 'E:\\romeiro.dev\\VerseHaven\\Verse-Haven' },
-    { name: 'Accanto', path: 'E:\\romeiro.dev\\Accanto' },
-    { name: 'tapp.food', path: 'E:\\romeiro.dev\\Reels Food' },
-    { name: 'Romeiro', path: 'E:\\romeiro.dev\\Romeiro' },
-    { name: 'NATAL', path: 'E:\\romeiro.dev\\NATAL' },
-    { name: 'sil', path: 'E:\\romeiro.dev\\sil' },
-    { name: 'alemao', path: 'E:\\romeiro.dev\\alemao' },
-    { name: 'REVERSE LIVE', path: 'E:\\romeiro.dev\\REVERSE LIVE' },
-    { name: 'spy-inovasys', path: 'E:\\romeiro.dev\\InovaSys' }
-  ]
-
-  const foundProjects = realProjects.filter((p) => existsSync(p.path))
-
   db.tx(() => {
     for (const a of [lia, theo, nina]) db.saveAgent(a)
-    if (foundProjects.length > 0 && process.env['ELEFANTE_FAKE_ENGINES'] !== '1') {
-      for (const p of foundProjects) {
-        db.createConversation({
-          id: randomUUID(),
-          kind: 'channel',
-          name: p.name,
-          project: p.path,
-          topic: p.path,
-          members: [lia.id, theo.id, nina.id]
-        })
-      }
-    } else {
-      db.createConversation({ id: randomUUID(), kind: 'channel', name: L('engenharia', 'engineering'), members: [lia.id, theo.id] })
-      db.createConversation({ id: randomUUID(), kind: 'channel', name: L('dados', 'data'), members: [theo.id] })
-      db.createConversation({ id: randomUUID(), kind: 'channel', name: L('conteudo', 'content'), members: [nina.id] })
-    }
+    db.createConversation({ id: randomUUID(), kind: 'channel', name: L('engenharia', 'engineering'), members: [lia.id, theo.id] })
+    db.createConversation({ id: randomUUID(), kind: 'channel', name: L('dados', 'data'), members: [theo.id] })
+    db.createConversation({ id: randomUUID(), kind: 'channel', name: L('conteudo', 'content'), members: [nina.id] })
   })
 }

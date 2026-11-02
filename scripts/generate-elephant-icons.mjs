@@ -1,10 +1,10 @@
 import { app, BrowserWindow, nativeImage } from 'electron'
-import { writeFileSync, readFileSync, unlinkSync } from 'node:fs'
+import { writeFileSync, readFileSync, unlinkSync, existsSync } from 'node:fs'
 import { join } from 'node:path'
 
-const rootDir = 'D:\\IA LOCAL\\elefante-src'
-const srcImgPath = 'C:\\Users\\vncs\\.gemini\\antigravity-cli\\brain\\f69bc7d6-ed95-48ca-a54e-f4834387bfc0\\elefante_app_icon_v3_1793566460288.jpg'
-const b64 = readFileSync(srcImgPath).toString('base64')
+const rootDir = process.cwd()
+const srcImgPath = process.env['ELEFANTE_ICON_SRC'] || join(rootDir, 'build', 'icon.png')
+const b64 = existsSync(srcImgPath) ? readFileSync(srcImgPath).toString('base64') : ''
 const dataUri = `data:image/jpeg;base64,${b64}`
 
 const svg512 = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">

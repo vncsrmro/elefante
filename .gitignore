@@ -18,3 +18,8 @@ site/
 
 # Artifacts & tests
 scripts/shots/
+
+# Local custom setup & private scripts
+scripts/seed-elefante-ecosystem.mjs
+scripts/*.local.*
+*.local
