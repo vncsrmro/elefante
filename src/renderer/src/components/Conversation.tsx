@@ -330,6 +330,7 @@ function MessageRow({ message, grouped }: { message: Message; grouped: boolean }
             <Markdown remarkPlugins={[remarkGfm]} components={{ pre: CodeBlock }}>{highlightMentions(message.text)}</Markdown>
           </div>
         ) : null}
+        {!agent && <span className="msg__my-time">{time(message.at)}</span>}
         {attached.length > 0 && (
           <div className="artifacts artifacts--mine">
             {attached.map((a) => (

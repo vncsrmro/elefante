@@ -30,7 +30,9 @@ export function ProjectExplorer({ currentProject }: { currentProject?: string })
   const [activeFileIndex, setActiveFileIndex] = useState<number>(-1)
   const [copyFeedback, setCopyFeedback] = useState<boolean>(false)
   const [saveFeedback, setSaveFeedback] = useState<boolean>(false)
-  const [editMode, setEditMode] = useState<boolean>(false)
+  const [editMode, setEditMode] = useState<boolean>(true)
+  const textareaRef = useRef<HTMLTextAreaElement>(null)
+  const gutterRef = useRef<HTMLDivElement>(null)
 
   // Update folderPath if conversation project changes and has value
   useEffect(() => {
@@ -74,12 +76,13 @@ export function ProjectExplorer({ currentProject }: { currentProject?: string })
     })
   }
 
-  // Open file in editor tab
+  // Open file in editor tab directly
   const openFile = async (item: ProjectFileItem): Promise<void> => {
     const existingIndex = openTabs.findIndex((t) => t.path === item.path)
     if (existingIndex >= 0) {
       setActiveFileIndex(existingIndex)
       setActiveTab('editor')
+      setEditMode(true)
       return
     }
 
@@ -98,6 +101,7 @@ export function ProjectExplorer({ currentProject }: { currentProject?: string })
       setOpenTabs((prev) => [...prev, newTab])
       setActiveFileIndex(openTabs.length)
       setActiveTab('editor')
+      setEditMode(true)
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err))
     }
@@ -130,6 +134,32 @@ export function ProjectExplorer({ currentProject }: { currentProject?: string })
       setTimeout(() => setSaveFeedback(false), 2000)
     } catch (err) {
       alert(err instanceof Error ? err.message : String(err))
+    }
+  }
+
+  // Handle Tab key indentation inside code editor
+  const handleTextareaKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>): void => {
+    if (e.key === 'Tab') {
+      e.preventDefault()
+      const textarea = e.currentTarget
+      const start = textarea.selectionStart
+      const end = textarea.selectionEnd
+      const val = textarea.value
+      const nextVal = val.substring(0, start) + '  ' + val.substring(end)
+      setOpenTabs((prev) =>
+        prev.map((t, i) =>
+          i === activeFileIndex ? { ...t, content: nextVal, isDirty: nextVal !== t.initialContent } : t
+        )
+      )
+      requestAnimationFrame(() => {
+        textarea.selectionStart = textarea.selectionEnd = start + 2
+      })
+    }
+  }
+
+  const handleScroll = (e: React.UIEvent<HTMLTextAreaElement>): void => {
+    if (gutterRef.current) {
+      gutterRef.current.scrollTop = e.currentTarget.scrollTop
     }
   }
 
@@ -338,20 +368,20 @@ export function ProjectExplorer({ currentProject }: { currentProject?: string })
             </div>
             <div className="editor-actions-bar__buttons">
               <button
-                className={`btn btn--sm ${!editMode ? 'btn--primary' : 'btn--ghost'}`}
-                title={L('Alternar modo de visualização / syntax', 'Toggle view / syntax mode')}
-                onClick={() => setEditMode(false)}
-              >
-                <Icon name="fileCode" size={12} />
-                <span>{L('Visualizar', 'View')}</span>
-              </button>
-              <button
                 className={`btn btn--sm ${editMode ? 'btn--primary' : 'btn--ghost'}`}
-                title={L('Alternar modo de edição', 'Toggle edit mode')}
+                title={L('Editor Direto com indentação e salvamento', 'Direct Editor mode')}
                 onClick={() => setEditMode(true)}
               >
                 <Icon name="compose" size={12} />
-                <span>{L('Editar', 'Edit')}</span>
+                <span>{L('Editor', 'Editor')}</span>
+              </button>
+              <button
+                className={`btn btn--sm ${!editMode ? 'btn--primary' : 'btn--ghost'}`}
+                title={L('Alternar modo de visualização com Syntax Highlighting', 'Toggle syntax preview mode')}
+                onClick={() => setEditMode(false)}
+              >
+                <Icon name="fileCode" size={12} />
+                <span>{L('Syntax Preview', 'Syntax Preview')}</span>
               </button>
               <button
                 className="btn btn--sm btn--ghost"
@@ -396,7 +426,7 @@ export function ProjectExplorer({ currentProject }: { currentProject?: string })
               <span
                 className="terminal-dot terminal-dot--yellow"
                 onClick={() => setEditMode(!editMode)}
-                title={L('Alternar modo (Visualizar / Editar)', 'Toggle mode (View / Edit)')}
+                title={L('Alternar modo (Editor / Syntax Preview)', 'Toggle mode (Editor / Syntax Preview)')}
               />
               <span
                 className="terminal-dot terminal-dot--green"
@@ -412,7 +442,7 @@ export function ProjectExplorer({ currentProject }: { currentProject?: string })
               )}
             </div>
             <span className="terminal-badge">
-              {editMode ? L('MODO EDIÇÃO', 'EDIT MODE') : L('TERMINAL / SYNTAX', 'TERMINAL / SYNTAX')}
+              {editMode ? L('EDITOR ATIVO', 'ACTIVE EDITOR') : L('SYNTAX PREVIEW', 'SYNTAX PREVIEW')}
             </span>
           </div>
 
@@ -442,13 +472,13 @@ export function ProjectExplorer({ currentProject }: { currentProject?: string })
                   onDoubleClick={() => setEditMode(true)}
                 />
                 <div className="terminal-hint-bar">
-                  <span>{L('Terminal Code View (Syntax Highlighting). Duplo clique para editar diretamente.', 'Terminal Code View. Double click to edit directly.')}</span>
+                  <span>{L('Syntax Highlighting Preview. Clique em Editor ou dê duplo clique para editar.', 'Syntax Highlighting Preview. Double click to edit.')}</span>
                   <span>{activeTabItem.content.split('\n').length} {L('linhas', 'lines')}</span>
                 </div>
               </div>
             ) : (
               <div className="code-editor-container code-editor-container--terminal">
-                <div className="code-editor-gutter">
+                <div ref={gutterRef} className="code-editor-gutter">
                   {activeTabItem.content.split('\n').map((_, i) => (
                     <span key={i} className="gutter-num">
                       {i + 1}
@@ -456,8 +486,11 @@ export function ProjectExplorer({ currentProject }: { currentProject?: string })
                   ))}
                 </div>
                 <textarea
+                  ref={textareaRef}
                   className="code-editor-textarea code-editor-textarea--terminal"
                   value={activeTabItem.content}
+                  onScroll={handleScroll}
+                  onKeyDown={handleTextareaKeyDown}
                   onChange={(e) => {
                     const newContent = e.target.value
                     setOpenTabs((prev) =>

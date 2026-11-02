@@ -1,9 +1,9 @@
-import { useState, useEffect, type ReactNode } from 'react'
+import { useState, useEffect, useRef, type ReactNode } from 'react'
 import { L } from '../../../shared/lang'
 import { navigate, toggleRightPanel, updateSettings, useStore, type State } from '../store'
 import { call } from '../rpc'
 import { Icon } from './ui'
-import type { CloudCliInfo, UsageReport } from '../../../shared/types'
+import type { CloudCliInfo, HostDiscoveryResult, UsageReport } from '../../../shared/types'
 
 export function StatusBar(): ReactNode {
   const rightPanelOpen = useStore((s) => s.rightPanelOpen)
@@ -15,8 +15,12 @@ export function StatusBar(): ReactNode {
   const hasDeepSeek = !!(apiProviders?.deepseek?.hasKey || apiProviders?.deepseek?.enabled)
   const [clis, setClis] = useState<CloudCliInfo[]>([])
   const [usageData, setUsageData] = useState<UsageReport | null>(null)
+  const [hostsData, setHostsData] = useState<HostDiscoveryResult | null>(null)
+  const [hostsOpen, setHostsOpen] = useState(false)
+  const [refreshingHosts, setRefreshingHosts] = useState(false)
+  const hostsRef = useRef<HTMLDivElement>(null)
 
-  // Fetch active CLIs count and usage summary
+  // Fetch active CLIs count, usage summary, and dynamic host discovery
   useEffect(() => {
     let cancel = false
     void call('cloudClis').then((res) => {
@@ -25,10 +29,37 @@ export function StatusBar(): ReactNode {
     void call('usage').then((res) => {
       if (!cancel && res) setUsageData(res)
     })
+    void call('hosts').then((res) => {
+      if (!cancel && res) setHostsData(res)
+    })
     return () => {
       cancel = true
     }
   }, [])
+
+  // Close hosts popover on click outside
+  useEffect(() => {
+    if (!hostsOpen) return
+    const handleClickOutside = (e: MouseEvent): void => {
+      if (hostsRef.current && !hostsRef.current.contains(e.target as Node)) {
+        setHostsOpen(false)
+      }
+    }
+    window.addEventListener('mousedown', handleClickOutside)
+    return () => {
+      window.removeEventListener('mousedown', handleClickOutside)
+    }
+  }, [hostsOpen])
+
+  const refreshHosts = async (): Promise<void> => {
+    setRefreshingHosts(true)
+    try {
+      const res = await call('hosts')
+      if (res) setHostsData(res)
+    } finally {
+      setRefreshingHosts(false)
+    }
+  }
 
   const loggedInClis = clis.filter((c) => c.loggedIn).length
   const totalClis = clis.length || 24
@@ -164,11 +195,82 @@ export function StatusBar(): ReactNode {
           </button>
         )}
 
-        {/* Host info */}
-        <div className="status-bar__item status-bar__item--host" title={L('Host local do Elefante', 'Local Elefante host')}>
-          <span className="status-bar__dot status-bar__dot--green" />
-          <span>1 host local</span>
-        </div>
+        {/* Dynamic Host Info & Popover */}
+        {(() => {
+          const connectedHosts = hostsData?.hosts.filter((h) => h.connected) ?? []
+          const connectedCount = hostsData?.connected ?? 1
+          const connectedNames = connectedHosts.map((h) => (h.kind === 'local' ? 'local' : h.name))
+          const hostLabel =
+            connectedCount > 1
+              ? `${connectedCount} hosts (${connectedNames.join(', ')})`
+              : connectedHosts[0]?.machineName
+                ? `1 host local (${connectedHosts[0].machineName})`
+                : '1 host local'
+
+          return (
+            <div className="status-bar__host-wrapper" ref={hostsRef}>
+              <button
+                className={`status-bar__item status-bar__item--clickable status-bar__item--host ${hostsOpen ? 'is-active' : ''}`}
+                onClick={() => setHostsOpen((v) => !v)}
+                title={L(
+                  `${connectedCount} host(s) ativo(s): ${connectedNames.join(', ')}. Clique para gerenciar hosts e conexões`,
+                  `${connectedCount} active host(s): ${connectedNames.join(', ')}. Click to manage hosts`
+                )}
+              >
+                <span className="status-bar__dot status-bar__dot--green" />
+                <span>{hostLabel}</span>
+              </button>
+
+              {hostsOpen && (
+                <div className="hosts-popover">
+                  <div className="hosts-popover__header">
+                    <div className="hosts-popover__title">
+                      <Icon name="terminal" size={13} />
+                      <strong>{L('Hosts & Ambientes', 'Hosts & Environments')}</strong>
+                    </div>
+                    <button
+                      className="icon-btn icon-btn--xs"
+                      onClick={() => void refreshHosts()}
+                      title={L('Atualizar lista de hosts', 'Refresh hosts')}
+                      disabled={refreshingHosts}
+                    >
+                      <Icon name="refresh" size={11} className={refreshingHosts ? 'spin' : ''} />
+                    </button>
+                  </div>
+
+                  <div className="hosts-popover__list">
+                    {(hostsData?.hosts ?? []).map((h) => (
+                      <div key={h.id} className={`hosts-popover__item ${h.connected ? 'is-connected' : 'is-offline'}`}>
+                        <span className={`status-bar__dot ${h.connected ? 'status-bar__dot--green' : 'status-bar__dot--gray'}`} />
+                        <div className="hosts-popover__info">
+                          <div className="hosts-popover__item-name">
+                            <strong>{h.name === 'this machine' ? (h.machineName || 'Local') : h.name}</strong>
+                            <span className="tag tag--xs">{h.kind.toUpperCase()}</span>
+                          </div>
+                          <span className="small muted">
+                            {h.detail || (h.connected ? L('Conectado', 'Connected') : L('Desconectado', 'Disconnected'))}
+                          </span>
+                        </div>
+                        <span className={`hosts-popover__status-badge ${h.connected ? 'badge--ok' : 'badge--muted'}`}>
+                          {h.connected ? L('Ativo', 'Active') : L('Offline', 'Offline')}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+
+                  <div className="hosts-popover__footer">
+                    <span className="small muted">
+                      {L(
+                        `${connectedCount} de ${hostsData?.total ?? 1} host(s) pronto(s) para execução`,
+                        `${connectedCount} of ${hostsData?.total ?? 1} host(s) ready`
+                      )}
+                    </span>
+                  </div>
+                </div>
+              )}
+            </div>
+          )
+        })()}
 
         {/* Toggle Right Panel (Files & Code Editor) */}
         <button

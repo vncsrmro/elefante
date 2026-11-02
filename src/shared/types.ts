@@ -818,3 +818,22 @@ export interface ProjectFileInfo {
   language: string
 }
 
+// ---------- Dynamic Hosts Discovery (Local + Orca + Remote) ----------
+
+export interface HostInfo {
+  id: string
+  name: string
+  kind: 'local' | 'ssh' | 'docker' | 'environment' | 'other'
+  connected: boolean
+  machineName?: string
+  platform?: string
+  selector?: string
+  detail?: string
+}
+
+export interface HostDiscoveryResult {
+  total: number
+  connected: number
+  hosts: HostInfo[]
+}
+

@@ -1,5 +1,5 @@
 // The contract between the renderer and the core, carried over a MessagePort.
-import type { Os, Agent, ApiProviderId, BrowserInput, Approval, Artifact, ImageUpload, BrowserView, CloudCliId, CloudCliInfo, ComputerInfo, Connector, ConnectorInput, ConnectorTool, HarnessMcp, Conversation, EngineId, Memory, MemoryScope, Message, ProjectCliContext, ProjectFileItem, ProjectFileInfo, Routine, RoutineInput, Report, Settings, LocalSkill, Skill, SkillInput, SkillVersion, Trigger, UsageReport } from './types'
+import type { Os, Agent, ApiProviderId, BrowserInput, Approval, Artifact, ImageUpload, BrowserView, CloudCliId, CloudCliInfo, ComputerInfo, Connector, ConnectorInput, ConnectorTool, HarnessMcp, Conversation, EngineId, HostDiscoveryResult, Memory, MemoryScope, Message, ProjectCliContext, ProjectFileItem, ProjectFileInfo, Routine, RoutineInput, Report, Settings, LocalSkill, Skill, SkillInput, SkillVersion, Trigger, UsageReport } from './types'
 
 export interface Snapshot {
   settings: Settings
@@ -106,6 +106,7 @@ export interface Api {
   listProjectFiles(p: { folderPath: string }): { root: string; name: string; files: ProjectFileItem[] }
   readProjectFile(p: { filePath: string }): ProjectFileInfo
   writeProjectFile(p: { filePath: string; content: string }): { ok: boolean }
+  hosts(): Promise<HostDiscoveryResult>
 }
 
 export type Method = keyof Api

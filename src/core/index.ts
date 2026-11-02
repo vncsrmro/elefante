@@ -44,6 +44,7 @@ import { Memories } from './memory'
 import { loginEnv } from './mac'
 import { findLocalSkills } from './local-skills'
 import { detectCloudClis, inspectProjectCliContext } from './cloud-clis'
+import { detectHosts } from './hosts'
 import { listProjectFiles, readProjectFile, writeProjectFile } from './project-files'
 import { Routines } from './routines'
 import { Runner } from './runs'
@@ -961,6 +962,7 @@ const api: Api = {
   listProjectFiles: ({ folderPath }) => listProjectFiles(folderPath),
   readProjectFile: ({ filePath }) => readProjectFile(filePath),
   writeProjectFile: ({ filePath, content }) => writeProjectFile(filePath, content),
+  hosts: async () => detectHosts(),
 
   refreshEngines: () => {
     void detect()
