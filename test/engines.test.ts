@@ -339,8 +339,7 @@ describe('Antigravity stream', () => {
     expect(args).toContain('gemini-4-argon')
     expect(args).toContain('--effort')
     expect(args).toContain('high')
-    expect(args).toContain('-p')
-    expect(args.at(-1)).toBe('-')
+    expect(args).not.toContain('-p')
     expect(antigravityInput(turn)).toBe('Você é um assistente.\n\n---\n\nOlá!')
 
     // When model already has an effort suffix, --effort must be omitted to avoid conflicts

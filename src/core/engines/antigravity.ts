@@ -109,8 +109,7 @@ export function antigravityArgs(turn: Turn): string[] {
     '--dangerously-skip-permissions',
     '--output-format', 'stream-json',
     ...effortArgs,
-    '--model', model,
-    '-p', '-'
+    '--model', model
   ]
 }
 
