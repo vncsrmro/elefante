@@ -90,6 +90,10 @@ export function antigravityParser(): Parser {
   }
 }
 
+export function antigravityInput(turn: Turn): string {
+  return turn.system ? `${turn.system}\n\n---\n\n${turn.prompt}` : turn.prompt
+}
+
 export function antigravityArgs(turn: Turn): string[] {
   const model = turn.model.includes(':')
     ? turn.model.split(':')[1]!
@@ -101,14 +105,12 @@ export function antigravityArgs(turn: Turn): string[] {
   const effort = ['low', 'medium', 'high', 'xhigh', 'max'].includes(turn.effort) ? turn.effort : 'high'
   const effortArgs = hasEffortSuffix ? [] : ['--effort', effort]
 
-  const prompt = turn.system ? `${turn.system}\n\n---\n\n${turn.prompt}` : turn.prompt
-
   return [
     '--dangerously-skip-permissions',
     '--output-format', 'stream-json',
     ...effortArgs,
     '--model', model,
-    '-p', prompt
+    '-p', '-'
   ]
 }
 
@@ -138,7 +140,7 @@ export function antigravityEngine(bin: () => string | undefined, shellEnv: () =>
       yield* runCli({
         bin: path,
         args: antigravityArgs(turn),
-        stdin: '',
+        stdin: antigravityInput(turn),
         cwd: turn.cwd,
         signal: turn.signal,
         parser: antigravityParser(),

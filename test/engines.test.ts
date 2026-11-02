@@ -6,7 +6,7 @@ import type { Parser } from '../src/core/engines/cli'
 import { claudeArgs, claudeInput, claudeParser, userProvider } from '../src/core/engines/claude'
 import { CODEX_DISABLED_FEATURES, codexArgs, codexEnv, codexParser, userCodexProvider } from '../src/core/engines/codex'
 import { geminiArgs, geminiEnv, geminiHome, geminiParser } from '../src/core/engines/gemini'
-import { antigravityArgs, antigravityParser } from '../src/core/engines/antigravity'
+import { antigravityArgs, antigravityInput, antigravityParser } from '../src/core/engines/antigravity'
 import { customModel, modelInfo, usable } from '../src/shared/types'
 import type { EngineEvent } from '../src/core/engines/types'
 
@@ -322,15 +322,16 @@ describe('Antigravity stream', () => {
     })
   })
 
-  it('builds args with model, effort and prompt', () => {
-    const args = antigravityArgs({
+  it('builds args with model and effort, piping prompt via stdin', () => {
+    const turn = {
       model: 'antigravity:gemini-4-argon',
-      effort: 'high',
+      effort: 'high' as const,
       system: 'Você é um assistente.',
       prompt: 'Olá!',
       cwd: '/tmp',
       signal: new AbortController().signal
-    })
+    }
+    const args = antigravityArgs(turn)
     expect(args).toContain('--dangerously-skip-permissions')
     expect(args).toContain('--output-format')
     expect(args).toContain('stream-json')
@@ -339,7 +340,8 @@ describe('Antigravity stream', () => {
     expect(args).toContain('--effort')
     expect(args).toContain('high')
     expect(args).toContain('-p')
-    expect(args.at(-1)).toBe('Você é um assistente.\n\n---\n\nOlá!')
+    expect(args.at(-1)).toBe('-')
+    expect(antigravityInput(turn)).toBe('Você é um assistente.\n\n---\n\nOlá!')
 
     // When model already has an effort suffix, --effort must be omitted to avoid conflicts
     const argsWithSuffix = antigravityArgs({
