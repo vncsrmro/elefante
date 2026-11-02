@@ -67,6 +67,27 @@ describe('systemPrompt', () => {
     expect(s).not.toContain('## Suas instruções')
     expect(s).toContain('conversa direta (DM) com Edu')
   })
+
+  it('includes authorized project folders and proactivity rules when macFolder is active', () => {
+    const dev = agent('a3', 'dev', {
+      folders: [
+        { name: 'PaperX', path: 'E:\\romeiro.dev\\PaperX', readOnly: false },
+        { name: 'RVTEC', path: 'E:\\romeiro.dev\\RVTEC', readOnly: false }
+      ]
+    })
+    const s = systemPrompt({
+      agent: dev,
+      settings: { workspaceName: 'Vinicius', context: '' },
+      conversation: channel,
+      peers: [],
+      hasComputer: true,
+      macFolder: 'D:\\IA LOCAL'
+    })
+    expect(s).toContain('Projetos e pastas autorizadas no seu computador:')
+    expect(s).toContain('- **PaperX**: `E:\\romeiro.dev\\PaperX`')
+    expect(s).toContain('- **RVTEC**: `E:\\romeiro.dev\\RVTEC`')
+    expect(s).toContain('NUNCA responda apenas com saudações genéricas')
+  })
 })
 
 describe('transcript', () => {
