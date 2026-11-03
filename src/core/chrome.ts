@@ -5,11 +5,11 @@
 // a normal window when I take over ("Assumir"). Driven over the DevTools
 // protocol; the page scripts are the same as in the Electron fallback. The
 // screen streams to the app while it changes, so the panel is a live view.
-import { spawn, type ChildProcess } from 'node:child_process'
+import { execFileSync, spawn, type ChildProcess } from 'node:child_process'
 import { existsSync, mkdirSync, readFileSync, readlinkSync, rmSync } from 'node:fs'
 import { join } from 'node:path'
 import { L } from '../shared/lang'
-import { findChrome, userAgentPlatform } from './platform'
+import { browserBrand, findBrowser, findChrome, userAgentPlatform } from './platform'
 import { POINT, PICK, SNAPSHOT, TEXT } from '../shared/page'
 import type { BrowserInput, BrowserOp, BrowserReply } from '../shared/types'
 
@@ -29,12 +29,27 @@ const alive = (pid: number): boolean => {
     return false
   }
 }
-// Chrome takes a moment to let go of its profile; a new one started before that just hands over to it.
+// Browser takes a moment to let go of its profile; on Windows all child processes must be terminated
 async function gone(proc: ChildProcess, ms = 10_000): Promise<void> {
   if (proc.exitCode !== null || proc.signalCode !== null) return
-  proc.kill()
+  if (process.platform === 'win32' && proc.pid) {
+    try {
+      execFileSync('taskkill', ['/pid', String(proc.pid), '/T', '/F'], { stdio: 'ignore' })
+    } catch {
+      proc.kill()
+    }
+  } else {
+    proc.kill()
+  }
   await Promise.race([new Promise((r) => proc.once('exit', r)), wait(ms)])
-  if (proc.exitCode === null && proc.signalCode === null) proc.kill('SIGKILL')
+  if (proc.exitCode === null && proc.signalCode === null) {
+    try {
+      proc.kill('SIGKILL')
+    } catch {}
+  }
+  if (process.platform === 'win32') {
+    await wait(300)
+  }
 }
 
 const KEYS: Record<string, { key: string; code: string; vk: number; text?: string }> = {
@@ -192,12 +207,51 @@ class Tab {
       this.ws.close()
     } catch {}
   }
+
+  // Uploads one or more files directly into an <input type="file"> via CDP
+  async upload(files: string[], selector = 'input[type="file"]'): Promise<void> {
+    await this.cmd('DOM.enable')
+    let targetNodeId: number | undefined
+    try {
+      const { root } = (await this.cmd('DOM.getDocument', { depth: 0 })) as { root: { nodeId: number } }
+      const { nodeId } = (await this.cmd('DOM.querySelector', { nodeId: root.nodeId, selector })) as { nodeId: number }
+      if (nodeId) targetNodeId = nodeId
+    } catch {}
+    if (!targetNodeId) {
+      try {
+        const { root } = (await this.cmd('DOM.getDocument', { depth: 0 })) as { root: { nodeId: number } }
+        const { nodeId } = (await this.cmd('DOM.querySelector', { nodeId: root.nodeId, selector: 'input[type="file"]' })) as { nodeId: number }
+        if (nodeId) targetNodeId = nodeId
+      } catch {}
+    }
+    if (!targetNodeId) {
+      const obj = (await this.cmd('Runtime.evaluate', {
+        expression: `document.querySelector(${JSON.stringify(selector)}) || document.querySelector('input[type="file"]')`,
+        returnByValue: false
+      })) as { result: { objectId?: string } }
+      if (obj.result?.objectId) {
+        await this.cmd('DOM.setFileInputFiles', { files, objectId: obj.result.objectId })
+      } else {
+        throw new Error(L('Nenhum campo de upload de arquivo (<input type="file">) encontrado na página.', 'No file input (<input type="file">) found on the page.'))
+      }
+    } else {
+      await this.cmd('DOM.setFileInputFiles', { files, nodeId: targetNodeId })
+    }
+    await this.run(`(() => {
+      const el = document.querySelector(${JSON.stringify(selector)}) || document.querySelector('input[type="file"]');
+      if (el) {
+        el.dispatchEvent(new Event('change', { bubbles: true }));
+        el.dispatchEvent(new Event('input', { bubbles: true }));
+      }
+    })()`)
+  }
 }
 
 export class ChromeBrowsers {
   private tabs = new Map<string, Tab>()
   private starting = new Map<string, Promise<Tab>>()
   private handingBack = new Set<string>()
+  private agentBins = new Map<string, string>()
 
   constructor(
     private dir: string, // profiles live in <dir>/<agentId>
@@ -216,22 +270,49 @@ export class ChromeBrowsers {
     this.tabs.clear()
   }
 
-  private profile(agentId: string): string {
-    return join(this.dir, agentId)
+  private profile(agentId: string, bin?: string): string {
+    const targetBin = bin ?? this.agentBins.get(agentId) ?? this.bin
+    const brand = browserBrand(targetBin).toLowerCase().replace(/[^a-z0-9]/g, '')
+    const brandDir = join(this.dir, `${agentId}-${brand}`)
+    const legacyDir = join(this.dir, agentId)
+    if (!existsSync(brandDir) && existsSync(legacyDir) && brand === 'chrome') {
+      return legacyDir
+    }
+    return brandDir
   }
 
-  private async launch(agentId: string, headed: boolean, url?: string): Promise<Tab> {
-    const profile = this.profile(agentId)
+  private async launch(agentId: string, headed: boolean, url?: string, binary?: string): Promise<Tab> {
+    const bin = binary ?? this.agentBins.get(agentId) ?? this.bin
+    if (!bin) throw new Error(L('Nenhum navegador compatível encontrado (Ego, Chrome, Edge ou Brave).', 'No compatible browser found (Ego, Chrome, Edge or Brave).'))
+    this.agentBins.set(agentId, bin)
+    const profile = this.profile(agentId, bin)
     mkdirSync(profile, { recursive: true })
     // A Chrome left behind (the app crashed) still holds the profile: a new one would just hand over to it.
     try {
       const pid = Number(readlinkSync(join(profile, 'SingletonLock')).split('-').pop())
       if (pid && alive(pid)) {
-        process.kill(pid)
+        if (process.platform === 'win32') {
+          try { execFileSync('taskkill', ['/pid', String(pid), '/T', '/F'], { stdio: 'ignore' }) } catch { process.kill(pid) }
+        } else {
+          process.kill(pid)
+        }
         for (let i = 0; i < 50 && alive(pid); i++) await wait(200)
       }
     } catch {}
-    rmSync(join(profile, 'DevToolsActivePort'), { force: true })
+    try {
+      rmSync(join(profile, 'SingletonLock'), { force: true })
+      rmSync(join(profile, 'lockfile'), { force: true })
+      rmSync(join(profile, 'SingletonCookie'), { force: true })
+      rmSync(join(profile, 'SingletonSocket'), { force: true })
+    } catch {}
+    for (let i = 0; i < 20; i++) {
+      try {
+        rmSync(join(profile, 'DevToolsActivePort'), { force: true })
+        break
+      } catch {
+        await wait(100)
+      }
+    }
     const args = [
       `--user-data-dir=${profile}`,
       '--remote-debugging-port=0',
@@ -244,18 +325,31 @@ export class ChromeBrowsers {
       ...(headed ? ['--new-window'] : ['--headless=new', '--mute-audio']),
       url && /^https?:/.test(url) ? url : 'about:blank'
     ]
-    const proc = spawn(this.bin, args, { stdio: 'ignore' })
+    let proc = spawn(bin, args, { stdio: 'ignore' })
     let port = ''
     for (let i = 0; i < 150 && !port; i++) {
       await wait(200)
-      if (proc.exitCode !== null) throw new Error(L('o Chrome fechou logo ao abrir', 'Chrome closed right after opening'))
+      if (proc.exitCode !== null) {
+        // If it exited immediately during handoff on Windows, allow OS to breathe and retry spawn once
+        if (i < 5) {
+          await wait(500)
+          try { rmSync(join(profile, 'DevToolsActivePort'), { force: true }) } catch {}
+          proc = spawn(bin, args, { stdio: 'ignore' })
+          continue
+        }
+        throw new Error(L('o navegador fechou logo ao abrir', 'browser closed right after opening'))
+      }
       try {
         port = readFileSync(join(profile, 'DevToolsActivePort'), 'utf8').split('\n')[0] ?? ''
       } catch {}
     }
     if (!port) {
-      proc.kill()
-      throw new Error(L('o Chrome não abriu a tempo', "Chrome didn't open in time"))
+      if (process.platform === 'win32' && proc.pid) {
+        try { execFileSync('taskkill', ['/pid', String(proc.pid), '/T', '/F'], { stdio: 'ignore' }) } catch { proc.kill() }
+      } else {
+        proc.kill()
+      }
+      throw new Error(L('o navegador não abriu a tempo', "browser didn't open in time"))
     }
     const onFrame = this.onFrame
     const tab = new Tab(proc, headed, onFrame && ((jpeg) => onFrame(agentId, jpeg)))
@@ -271,13 +365,24 @@ export class ChromeBrowsers {
     return tab
   }
 
-  // The agent's Chrome, headless, started when first needed.
-  private async tab(agentId: string): Promise<Tab> {
-    const t = this.tabs.get(agentId)
-    if (t) return t
+  // The agent's browser, headless, started when first needed.
+  private async tab(agentId: string, requestedBin?: string): Promise<Tab> {
+    const wanted = requestedBin ?? this.agentBins.get(agentId) ?? this.bin
+    const currentTab = this.tabs.get(agentId)
+    const currentBin = this.agentBins.get(agentId) ?? this.bin
+
+    if (currentTab && requestedBin && wanted !== currentBin) {
+      this.tabs.delete(agentId)
+      currentTab.close()
+      await gone(currentTab.proc)
+    } else if (currentTab) {
+      return currentTab
+    }
+
     const going = this.starting.get(agentId)
     if (going) return going
-    const p = this.launch(agentId, false).finally(() => this.starting.delete(agentId))
+    this.agentBins.set(agentId, wanted)
+    const p = this.launch(agentId, false, undefined, wanted).finally(() => this.starting.delete(agentId))
     this.starting.set(agentId, p)
     return p
   }
@@ -291,37 +396,52 @@ export class ChromeBrowsers {
       this.tabs.delete(agentId)
       t.close()
     }
+    const currentBin = this.agentBins.get(agentId) ?? this.bin
     const p = (t?.headed ? gone(t.proc) : Promise.resolve())
-      .then(() => this.launch(agentId, false, url))
+      .then(() => (process.platform === 'win32' ? wait(400) : Promise.resolve()))
+      .then(() => this.launch(agentId, false, url, currentBin))
       .then(async (tab) => {
         await this.settle(tab)
+        // Only now: hearing it's back, the app asks for a frame and wakes up runner, which waits for this Chrome.
+        this.onShown(agentId, false)
         return tab
+      })
+      .catch((err) => {
+        this.onShown(agentId, false)
+        throw err
       })
       .finally(() => {
         this.starting.delete(agentId)
         this.handingBack.delete(agentId)
       })
     this.starting.set(agentId, p)
-    // Only now: hearing it's back, the app asks for a frame, which must wait for this Chrome, not start a blank one.
-    this.onShown(agentId, false)
   }
 
   async run(agentId: string, op: BrowserOp, args: Record<string, unknown> = {}): Promise<BrowserReply> {
+    const requested = args['browser'] || args['navegador'] ? String(args['browser'] || args['navegador']) : undefined
+    const wantedBin = requested ? findBrowser(requested) : undefined
+    if (wantedBin) {
+      this.agentBins.set(agentId, wantedBin)
+    }
+
     if (op === 'close' || op === 'clear') {
       const t = this.tabs.get(agentId)
       this.tabs.delete(agentId)
       t?.close()
       if (t) await gone(t.proc)
       if (op === 'clear') {
-        rmSync(this.profile(agentId), { recursive: true, force: true })
+        const currentBin = this.agentBins.get(agentId) ?? this.bin
+        rmSync(this.profile(agentId, currentBin), { recursive: true, force: true })
+        rmSync(join(this.dir, agentId), { recursive: true, force: true })
       }
       return { url: '', title: '' }
     }
     if (op === 'show' && this.windowless) {
-      const tab = await this.tab(agentId)
+      const tab = await this.tab(agentId, wantedBin)
       tab.remote = true
       this.onShown(agentId, true)
-      return { url: tab.url, title: '', shown: true }
+      const brand = browserBrand(this.agentBins.get(agentId) || this.bin)
+      return { url: tab.url, title: '', browserName: brand, shown: true }
     }
     if (op === 'hide' && this.windowless) {
       const t = this.tabs.get(agentId)
@@ -329,40 +449,49 @@ export class ChromeBrowsers {
         t.remote = false
         this.onShown(agentId, false)
       }
-      return { url: t?.url ?? '', title: '', shown: false }
+      const brand = browserBrand(this.agentBins.get(agentId) || this.bin)
+      return { url: t?.url ?? '', title: '', browserName: brand, shown: false }
     }
     if (op === 'input') {
       const t = this.tabs.get(agentId)
       if (!t?.remote) throw new Error(L('Assuma o navegador antes de usar.', 'Take the browser over before using it.'))
       await this.input(t, args as BrowserInput)
-      return { url: t.url, title: '', shown: true }
+      const brand = browserBrand(this.agentBins.get(agentId) || this.bin)
+      return { url: t.url, title: '', browserName: brand, shown: true }
     }
     if (op === 'show') {
       const current = this.tabs.get(agentId) ?? (await this.starting.get(agentId))
-      if (current?.headed) return { url: current.url, title: '', shown: true }
+      const currentBin = wantedBin ?? this.agentBins.get(agentId) ?? this.bin
+      if (current?.headed && (!wantedBin || wantedBin === this.agentBins.get(agentId))) {
+        const brand = browserBrand(currentBin)
+        return { url: current.url, title: '', browserName: brand, shown: true }
+      }
       const url = current?.url
       if (current) {
         this.tabs.delete(agentId)
         current.close()
         await gone(current.proc)
       }
-      const tab = await this.launch(agentId, true, url)
+      const tab = await this.launch(agentId, true, url, currentBin)
       this.onShown(agentId, true)
-      return { url: tab.url, title: '', shown: true }
+      const brand = browserBrand(currentBin)
+      return { url: tab.url, title: '', browserName: brand, shown: true }
     }
     if (op === 'hide') {
       const t = this.tabs.get(agentId)
       if (t?.headed) this.handBack(agentId, t.url)
-      return { url: t?.url ?? '', title: '', shown: false }
+      const brand = browserBrand(this.agentBins.get(agentId) || this.bin)
+      return { url: t?.url ?? '', title: '', browserName: brand, shown: false }
     }
 
-    const tab = await this.tab(agentId)
+    const tab = await this.tab(agentId, wantedBin)
     const here = async (frame: boolean, at?: { x: number; y: number }): Promise<BrowserReply> => {
       const { w, h, ...info } = await tab
         .run<{ url: string; title: string; w: number; h: number }>('({ url: location.href, title: document.title, w: innerWidth, h: innerHeight })')
         .catch(() => ({ url: tab.url, title: '', w: 0, h: 0 }))
       const point = at && w && h ? { x: at.x / w, y: at.y / h } : undefined
-      return { ...info, shown: tab.headed || tab.remote, ...(point ? { point } : {}), ...(frame ? { frame: await this.frame(tab) } : {}) }
+      const brand = browserBrand(this.agentBins.get(agentId) || this.bin)
+      return { ...info, browserName: brand, shown: tab.headed || tab.remote, ...(point ? { point } : {}), ...(frame ? { frame: await this.frame(tab) } : {}) }
     }
 
     switch (op) {
@@ -374,8 +503,11 @@ export class ChromeBrowsers {
         await this.settle(tab)
         return here(true)
       }
-      case 'snapshot':
-        return { ...(await tab.run<BrowserReply>(SNAPSHOT)), shown: tab.headed || tab.remote }
+      case 'snapshot': {
+        const snap = await tab.run<BrowserReply>(SNAPSHOT)
+        const brand = browserBrand(this.agentBins.get(agentId) || this.bin)
+        return { ...snap, browserName: brand, shown: tab.headed || tab.remote }
+      }
       case 'click': {
         const at = typeof args['ref'] === 'number' ? await tab.run<{ x: number; y: number } | null>(POINT(args['ref'], false)) : { x: Number(args['x']), y: Number(args['y']) }
         if (!at || !Number.isFinite(at.x) || !Number.isFinite(at.y)) throw new Error(L('Esse elemento não está mais na página. Leia a página de novo.', 'That element is no longer on the page. Read the page again.'))
@@ -424,6 +556,15 @@ export class ChromeBrowsers {
       }
       case 'text':
         return { ...(await here(false)), text: await tab.run<string>(TEXT).catch(() => '') }
+      case 'upload': {
+        const rawFiles = Array.isArray(args['files']) ? args['files'] : [args['files'] || args['file']]
+        const files = rawFiles.flat().filter(Boolean).map(String)
+        const selector = typeof args['selector'] === 'string' ? args['selector'] : typeof args['seletor'] === 'string' ? args['seletor'] : 'input[type="file"]'
+        await tab.upload(files, selector)
+        await this.settle(tab)
+        await wait(600)
+        return here(true)
+      }
       case 'frame':
         return here(true)
     }
@@ -520,3 +661,4 @@ export class ChromeBrowsers {
 }
 
 export const hasChrome = (bin = CHROME): boolean => !!bin && existsSync(bin)
+export { browserBrand, findBrowser }

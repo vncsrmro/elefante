@@ -180,6 +180,15 @@ describe("an agent's browser", () => {
     expect(seen.artifact?.kind).toBe('image')
   })
 
+  it('uploads files directly to file input without asking for approval', async () => {
+    await browser.call(lia(), 'navegador_abrir', { url: 'https://instagram.com' }, ctx)
+    const r = await browser.call(lia(), 'navegador_enviar_arquivo', { arquivos: ['feed/day-10/01-cover.png', 'feed/day-10/02.png'] }, ctx)
+    expect(r.result.isError).toBeFalsy()
+    expect(fake.calls.some((c) => c.op === 'upload')).toBe(true)
+    const uploaded = (fake.calls.find((c) => c.op === 'upload')?.args?.['files'] as string[]).map((f) => f.replace(/\\/g, '/'))
+    expect(uploaded).toEqual(['feed/day-10/01-cover.png', 'feed/day-10/02.png'])
+  })
+
   it('while I drive it (Assumir), the agent only reads and waits', async () => {
     await browser.call(lia(), 'navegador_abrir', { url: 'https://studio.youtube.com' }, ctx)
     fake.page.shown = true // the main process shows the window, then tells the core

@@ -4,7 +4,7 @@ import { tmpdir } from 'node:os'
 import { delimiter, join } from 'node:path'
 import { describe, expect, it } from 'vitest'
 import { dockerProblem, ownedBack } from '../src/core/computer'
-import { autostartEntry, autostartFile, chromeCandidates, executableNames, fallbackPath, findChrome, gitRoot, loginShell, onPath, openWindowsConsole, osOf, shellCommand, spawnable, systemName, terminalCommand, userAgentPlatform, withInstallDirs } from '../src/core/platform'
+import { autostartEntry, autostartFile, browserBrand, chromeCandidates, executableNames, fallbackPath, findBrowser, findChrome, gitRoot, loginShell, onPath, openWindowsConsole, osOf, shellCommand, spawnable, systemName, terminalCommand, userAgentPlatform, withInstallDirs } from '../src/core/platform'
 import { shortcut } from '../src/shared/types'
 
 const win = process.platform === 'win32'
@@ -107,7 +107,20 @@ describe("the agents' Chrome", () => {
     const winCandidates = chromeCandidates('windows', { ProgramFiles: 'C:\\Program Files', LOCALAPPDATA: 'C:\\Users\\edu\\AppData\\Local' })
     expect(winCandidates[0]).toBe(join('C:\\Program Files', 'Google', 'Chrome', 'Application', 'chrome.exe'))
     expect(winCandidates).toContain(join('C:\\Program Files', 'BraveSoftware', 'Brave-Browser', 'Application', 'brave.exe'))
+    expect(winCandidates).toContain(join('C:\\Program Files', 'Citro Labs', 'ego lite', 'Application', 'ego.exe'))
     expect(findChrome('windows', (p) => p === join('C:\\Program Files', 'BraveSoftware', 'Brave-Browser', 'Application', 'brave.exe'))).toBe(join('C:\\Program Files', 'BraveSoftware', 'Brave-Browser', 'Application', 'brave.exe'))
+
+    // Browser brand matching
+    expect(browserBrand('C:\\Program Files\\Citro Labs\\ego lite\\Application\\ego.exe')).toBe('Ego')
+    expect(browserBrand('C:\\Program Files (x86)\\Microsoft\\Edge\\Application\\msedge.exe')).toBe('Edge')
+    expect(browserBrand('C:\\Program Files\\BraveSoftware\\Brave-Browser\\Application\\brave.exe')).toBe('Brave')
+    expect(browserBrand('C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe')).toBe('Chrome')
+
+    // findBrowser resolution
+    expect(findBrowser('ego', 'windows', (p) => p.includes('ego lite'))).toBe(join('C:\\Program Files', 'Citro Labs', 'ego lite', 'Application', 'ego.exe'))
+    expect(findBrowser('edge', 'windows', (p) => p.includes('Edge'))).toBe(join('C:\\Program Files', 'Microsoft', 'Edge', 'Application', 'msedge.exe'))
+    expect(findBrowser('brave', 'windows', (p) => p.includes('Brave'))).toBe(join('C:\\Program Files', 'BraveSoftware', 'Brave-Browser', 'Application', 'brave.exe'))
+    expect(findBrowser('chrome', 'windows', (p) => p.includes('Google'))).toBe(join('C:\\Program Files', 'Google', 'Chrome', 'Application', 'chrome.exe'))
   })
 
   it("tells sites the real system, so it matches the browser's own user agent", () => {

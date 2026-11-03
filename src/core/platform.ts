@@ -77,7 +77,7 @@ export function terminalCommand(command: string, os: Os, has: (bin: string) => b
   return undefined
 }
 
-// Google Chrome first, then other Chromium browsers (Brave, Edge, Chromium):
+// Google Chrome first, then other Chromium browsers (Ego, Brave, Edge, Chromium):
 // Google refuses its logins in the app's own browser. Chromium from a snap is left out,
 // since a snap can't write the profile in the app's (hidden) data folder.
 // On Windows, browsers install per machine or per user.
@@ -87,6 +87,8 @@ export function chromeCandidates(os: Os = osOf(), env: NodeJS.ProcessEnv = proce
   if (os === 'mac') {
     list = [
       '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome',
+      '/Applications/ego lite.app/Contents/MacOS/ego',
+      '/Applications/ego.app/Contents/MacOS/ego',
       '/Applications/Brave Browser.app/Contents/MacOS/Brave Browser',
       '/Applications/Microsoft Edge.app/Contents/MacOS/Microsoft Edge',
       '/Applications/Chromium.app/Contents/MacOS/Chromium'
@@ -96,6 +98,8 @@ export function chromeCandidates(os: Os = osOf(), env: NodeJS.ProcessEnv = proce
       '/usr/bin/google-chrome-stable',
       '/usr/bin/google-chrome',
       '/opt/google/chrome/chrome',
+      '/usr/bin/ego',
+      '/usr/bin/ego-lite',
       '/usr/bin/brave-browser',
       '/usr/bin/brave',
       '/usr/bin/microsoft-edge-stable',
@@ -107,6 +111,8 @@ export function chromeCandidates(os: Os = osOf(), env: NodeJS.ProcessEnv = proce
     const effectiveRoots = roots.length > 0 ? roots : ['C:\\Program Files', 'C:\\Program Files (x86)']
     const browserTails = [
       join('Google', 'Chrome', 'Application', 'chrome.exe'),
+      join('Citro Labs', 'ego lite', 'Application', 'ego.exe'),
+      join('Citro Labs', 'ego', 'Application', 'ego.exe'),
       join('BraveSoftware', 'Brave-Browser', 'Application', 'brave.exe'),
       join('Microsoft', 'Edge', 'Application', 'msedge.exe'),
       join('Chromium', 'Application', 'chrome.exe')
@@ -127,6 +133,42 @@ export function chromeCandidates(os: Os = osOf(), env: NodeJS.ProcessEnv = proce
 }
 
 export const findChrome = (os: Os = osOf(), exists: (p: string) => boolean = existsSync): string | undefined => chromeCandidates(os).find(exists)
+
+// Canonical brand name for a browser binary or candidate path
+export function browserBrand(pathOrName: string = ''): string {
+  const s = pathOrName.toLowerCase()
+  if (/ego/i.test(s)) return 'Ego'
+  if (/edge|msedge/i.test(s)) return 'Edge'
+  if (/brave/i.test(s)) return 'Brave'
+  if (/chrome|chromium/i.test(s)) return 'Chrome'
+  return 'Navegador'
+}
+
+// Find a specific browser candidate by name ('ego', 'edge', 'brave', 'chrome') or the default
+export function findBrowser(name?: string, os: Os = osOf(), exists: (p: string) => boolean = existsSync): string | undefined {
+  const candidates = chromeCandidates(os)
+  if (!name || name === 'auto' || name === 'default') {
+    return candidates.find(exists)
+  }
+  const clean = name.trim().toLowerCase()
+  let pattern: RegExp
+  if (/ego/i.test(clean)) {
+    pattern = /ego/i
+  } else if (/edge|msedge/i.test(clean)) {
+    pattern = /edge|msedge/i
+  } else if (/brave/i.test(clean)) {
+    pattern = /brave/i
+  } else if (/chrome/i.test(clean)) {
+    pattern = /chrome(?!.*brave)(?!.*edge)/i
+  } else {
+    pattern = new RegExp(clean.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i')
+  }
+
+  const match = candidates.filter((c) => pattern.test(c)).find(exists)
+  if (match) return match
+
+  return candidates.find(exists)
+}
 
 // What a headless Chrome tells sites about the machine, matching the real one.
 export const userAgentPlatform = (os: Os = osOf(), arch: string = process.arch): { platform: string; platformVersion: string; architecture: string } => ({

@@ -285,6 +285,7 @@ export function BrowserCard({ agentId, big }: { agentId: string; big?: boolean }
   const open = useStore((s) => s.panel?.kind === 'browser' && s.panel.agentId === agentId)
   const show = (): void => openPanel({ kind: 'browser', agentId })
   const status = view?.shown ? L('você está no controle', 'you’re in control') : view?.doing ? `${view.doing.label.toLowerCase()} ${view.doing.detail}` : view?.log.at(-1)?.label.toLowerCase() ?? L('parado', 'idle')
+  const brandLabel = view?.browserName ? ` · ${view.browserName}` : ''
 
   if (big)
     return (
@@ -292,7 +293,7 @@ export function BrowserCard({ agentId, big }: { agentId: string; big?: boolean }
         <header className="browser-live__head">
           <Icon name="globe" size={14} />
           <span className="browser-live__title">
-            <strong>{L(`Navegador de ${name}`, `${name}'s browser`)}</strong>
+            <strong>{L(`Navegador de ${name}`, `${name}'s browser`)}{brandLabel}</strong>
             <span className="muted"> · {status}</span>
           </span>
           <LiveBadge agentId={agentId} />
@@ -322,7 +323,7 @@ export function BrowserCard({ agentId, big }: { agentId: string; big?: boolean }
         </span>
       )}
       <span className="artifact-card__text">
-        <strong>{L(`Navegador de ${name}`, `${name}'s browser`)}</strong>
+        <strong>{L(`Navegador de ${name}`, `${name}'s browser`)}{brandLabel}</strong>
         <span className="muted small">{view?.shown ? L('Você está no controle', 'You’re in control') : view?.title || view?.url || L('Nenhuma página aberta', 'No page open')}</span>
       </span>
       <span className="artifact-card__open">{L('Ver', 'See')}</span>
@@ -361,10 +362,11 @@ export function SidePanel(): ReactNode {
   )
   const browser = useStore((s) => (s.panel?.kind === 'browser' ? browserOf(s, s.panel.agentId) : undefined))
   const browserName = useStore((s) => (s.panel?.kind === 'browser' ? agentById(s, s.panel.agentId)?.name : undefined))
+  const brandLabel = browser?.browserName ? ` · ${browser.browserName}` : ''
   const [reload, setReload] = useState(0)
   if (!panel) return null
 
-  const title = artifact?.title ?? service?.name ?? (panel.kind === 'browser' ? L(`Navegador de ${browserName ?? 'agente'}`, `${browserName ?? 'Agent'}'s browser`) : '')
+  const title = artifact?.title ?? service?.name ?? (panel.kind === 'browser' ? L(`Navegador de ${browserName ?? 'agente'}${brandLabel}`, `${browserName ?? 'Agent'}'s browser${brandLabel}`) : '')
   return (
     <aside className={`side-panel side-panel--${panel.kind}`}>
       <header className="side-panel__head">

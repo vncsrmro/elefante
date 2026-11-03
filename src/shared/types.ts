@@ -224,7 +224,7 @@ export interface Settings {
 }
 
 // What the main process does in an agent's browser for the core, and what it answers (spec §24).
-export type BrowserOp = 'open' | 'snapshot' | 'click' | 'type' | 'key' | 'scroll' | 'back' | 'text' | 'frame' | 'show' | 'hide' | 'close' | 'clear' | 'input'
+export type BrowserOp = 'open' | 'snapshot' | 'click' | 'type' | 'key' | 'scroll' | 'back' | 'text' | 'frame' | 'show' | 'hide' | 'close' | 'clear' | 'input' | 'upload'
 
 // What I do on the agent's browser from the panel, when it has no window of its own
 // (Elefante as a server): x and y are fractions of the screen.
@@ -243,6 +243,7 @@ export interface BrowserElement {
 export interface BrowserReply {
   url: string
   title: string
+  browserName?: string // e.g. "Ego", "Chrome", "Edge", "Brave"
   frame?: string // base64 JPEG of what's on screen
   w?: number // the viewport, in CSS pixels
   h?: number
@@ -259,6 +260,7 @@ export interface BrowserView {
   agentId: string
   url: string
   title: string
+  browserName?: string // e.g. "Ego", "Chrome", "Edge", "Brave"
   frame?: string // data:image/jpeg URL of the page as it is now
   shown: boolean // the window is open for me ("Assumir"): I'm driving
   log: { label: string; detail: string; at: number }[] // the latest actions, oldest first

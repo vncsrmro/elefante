@@ -4,8 +4,8 @@
 // page, by its text or, when chosen, with Jev. A click that buys, publishes,
 // sends or deletes something becomes an approval, like a sensitive tool.
 import { randomUUID } from 'node:crypto'
-import { mkdirSync, writeFileSync } from 'node:fs'
-import { join } from 'node:path'
+import { existsSync, mkdirSync, writeFileSync } from 'node:fs'
+import { basename, isAbsolute, join } from 'node:path'
 import type { CallToolResult } from '@modelcontextprotocol/sdk/types.js'
 import { L } from '../shared/lang'
 import type { CoreEvent } from '../shared/rpc'
@@ -33,14 +33,15 @@ export const browserTools = (): ToolDef[] => {
     {
       name: 'navegador_abrir',
       description: L(
-        'Abre um endereço no seu navegador. Use abrir_janela: true para abrir a janela visível na tela do usuário (essencial para logins, autenticação Google/Meta e captchas). Devolve o título, o endereço e o que dá pra clicar ou preencher na tela, numerado.',
-        'Opens an address in your browser. Use abrir_janela: true to open the visible window on the user screen (essential for logins, Google/Meta auth and captchas). Returns the title, the address and what can be clicked or filled in on screen, numbered.'
+        'Abre um endereço no seu navegador integrado (Ego, Chrome, Edge ou Brave). Use abrir_janela: true para abrir a janela visível na tela do usuário (essencial para logins, autenticação Google/Meta e captchas). Se o usuário sugeriu ou mencionou usar o Ego ou outro navegador específico, informe no parâmetro "navegador" ("ego", "edge", "brave", "chrome"). Devolve o título, o endereço e o que dá pra clicar ou preencher na tela, numerado.',
+        'Opens an address in your integrated browser (Ego, Chrome, Edge or Brave). Use abrir_janela: true to open the visible window on the user screen (essential for logins, Google/Meta auth and captchas). If the user suggested or mentioned using Ego or another specific browser, specify it in the "navegador" parameter ("ego", "edge", "brave", "chrome"). Returns the title, the address and what can be clicked or filled in on screen, numbered.'
       ),
       inputSchema: {
         type: 'object',
         properties: {
           url: { type: 'string', description: L('O endereço da página (ex.: https://labs.google/flow).', 'The page address.') },
-          abrir_janela: { type: 'boolean', description: L('Se true, abre a janela do navegador na tela do usuário para ele interagir ou logar.', 'If true, opens the browser window on the user screen.') }
+          abrir_janela: { type: 'boolean', description: L('Se true, abre a janela do navegador na tela do usuário para ele interagir ou logar.', 'If true, opens the browser window on the user screen.') },
+          navegador: { type: 'string', description: L('Navegador desejado: "ego", "edge", "brave" ou "chrome". Se o usuário pediu ou autorizou usar o Ego ou outro navegador, informe aqui.', 'Desired browser: "ego", "edge", "brave" or "chrome". If the user asked or authorized Ego or another browser, specify here.') }
         },
         required: ['url']
       }
@@ -108,11 +109,33 @@ export const browserTools = (): ToolDef[] => {
         },
         required: ['segundos']
       }
+    },
+    {
+      name: 'navegador_enviar_arquivo',
+      description: L(
+        'Envia um ou mais arquivos do seu computador diretamente para o campo de upload da página (essencial para Instagram, Google Flow, redes sociais, formulários). Não pede aprovação e faz o upload direto no campo de arquivo (<input type="file">).',
+        'Uploads one or more files from your computer directly to the page file input (essential for Instagram, Google Flow, social media, forms). Uploads directly without needing user intervention.'
+      ),
+      inputSchema: {
+        type: 'object',
+        properties: {
+          arquivos: {
+            type: 'array',
+            items: { type: 'string' },
+            description: L('Lista de caminhos dos arquivos no computador para enviar (ex.: ["feed/day-10/01-cover.png", "feed/day-10/02.png"]).', 'List of file paths on computer to upload.')
+          },
+          seletor: {
+            type: 'string',
+            description: L('Seletor CSS opcional do campo de upload (padrão: "input[type=file]").', 'Optional CSS selector for the upload input.')
+          }
+        },
+        required: ['arquivos']
+      }
     }
   ]
 }
 
-export const BROWSER_TOOL_NAMES = new Set(['navegador_abrir', CLICAR, 'navegador_digitar', 'navegador_tecla', 'navegador_rolar', 'navegador_voltar', 'navegador_ler', 'navegador_ver', 'navegador_esperar'])
+export const BROWSER_TOOL_NAMES = new Set(['navegador_abrir', CLICAR, 'navegador_digitar', 'navegador_tecla', 'navegador_rolar', 'navegador_voltar', 'navegador_ler', 'navegador_ver', 'navegador_esperar', 'navegador_enviar_arquivo'])
 
 // ---------- pure helpers (tested on their own) ----------
 
@@ -140,6 +163,9 @@ const RISKY =
   /\b(compr(ar|e|a)|finalizar (compra|pedido)|checkout|buy|purchase|pag(ar|ue)|pay|publi(car|que|sh)|postar|poste|post|enviar|envie|send|submit|confirm(ar|e)?|agend(ar|e)|schedule|salvar|save|coment(ar|e)|comment|responder|reply|exclu(ir|a)|apag(ar|ue)|delet(ar|e)|remov(er|a|e)|reserv(ar|e)|book|transferir|transfer|doar|donate|inscrever|subscribe|seguir|follow)\b/
 
 export const risky = (...texts: string[]): boolean => texts.some((t) => RISKY.test(norm(t)))
+
+// Social networks and creative suites where agents have total autonomy without approval popups
+const SOCIAL_SITES = /(instagram\.com|tiktok\.com|facebook\.com|twitter\.com|x\.com|linkedin\.com|threads\.net|flow\.google\.com|google\.com\/flow)/i
 
 // The element named by number, by its exact text, or by the only text that contains it.
 export function findByText(target: string, elements: BrowserElement[]): BrowserElement | undefined {
@@ -196,7 +222,8 @@ const labels = (): Record<string, string> => ({
   navegador_voltar: L('Voltou', 'Went back'),
   navegador_ler: L('Leu a página', 'Read the page'),
   navegador_ver: L('Olhou a tela', 'Looked at the screen'),
-  navegador_esperar: L('Esperou', 'Waited')
+  navegador_esperar: L('Esperou', 'Waited'),
+  navegador_enviar_arquivo: L('Enviou arquivo', 'Uploaded file')
 })
 
 // What it's doing right now, for the live view.
@@ -209,14 +236,25 @@ const doing = (): Record<string, string> => ({
   navegador_voltar: L('Voltando', 'Going back'),
   navegador_ler: L('Lendo a página', 'Reading the page'),
   navegador_ver: L('Olhando a tela', 'Looking at the screen'),
-  navegador_esperar: L('Esperando', 'Waiting')
+  navegador_esperar: L('Esperando', 'Waiting'),
+  navegador_enviar_arquivo: L('Enviando arquivos', 'Uploading files')
 })
 
 // One line for the step in the chat. What's typed never shows: it may be private.
 export function browserStep(name: string, args: Record<string, unknown>): { label: string; detail: string } {
   const s = (k: string): string => String(args[k] ?? '')
-  const detail =
-    name === 'navegador_abrir' ? s('url') : name === 'navegador_tecla' ? s('tecla') : name === 'navegador_rolar' ? (s('direcao') === 'cima' ? L('pra cima', 'up') : L('pra baixo', 'down')) : name === 'navegador_esperar' ? `${s('segundos')} s` : s('alvo')
+  let detail = ''
+  if (name === 'navegador_abrir') detail = s('url')
+  else if (name === 'navegador_tecla') detail = s('tecla')
+  else if (name === 'navegador_rolar') detail = s('direcao') === 'cima' ? L('pra cima', 'up') : L('pra baixo', 'down')
+  else if (name === 'navegador_esperar') detail = `${s('segundos')} s`
+  else if (name === 'navegador_enviar_arquivo') {
+    const raw = args['arquivos'] ?? args['arquivo'] ?? args['files'] ?? args['file']
+    const list = (Array.isArray(raw) ? raw : [raw]).filter(Boolean).map(String)
+    detail = list.map((f) => basename(f)).join(', ')
+  } else {
+    detail = s('alvo')
+  }
   return { label: labels()[name] ?? name, detail: detail.length > 140 ? `${detail.slice(0, 140)}…` : detail }
 }
 
@@ -239,7 +277,7 @@ export interface BrowserDeps {
   onHandback?: (agentId: string) => void // the user handed the browser back; the runner resumes a pending ask_user
 }
 
-type Ctx = { conversationId: string; messageId: string }
+type Ctx = { conversationId: string; messageId: string; project?: string }
 type Spot = { ref: number; el: BrowserElement; via: string } | { x: number; y: number; via: string }
 
 const LOG = 14
@@ -274,6 +312,7 @@ export class Browser {
       {
         url: r.url,
         title: r.title,
+        ...(r.browserName ? { browserName: r.browserName } : {}),
         ...(r.frame ? { frame: `data:image/jpeg;base64,${r.frame}` } : {}),
         ...(r.shown !== undefined ? { shown: r.shown } : {}),
         ...(r.point ? { cursor: { ...r.point, at: Date.now() } } : {})
@@ -394,7 +433,8 @@ export class Browser {
           let url = String(args['url'] ?? '').trim()
           if (url && !/^[a-z]+:/i.test(url)) url = `https://${url}`
           if (!/^https?:\/\//i.test(url)) return { result: textResult(L('Só endereços http e https.', 'Only http and https addresses.'), true) }
-          const res = await this.after(id, await this.deps.host(id, 'open', { url }), { ...step, detail: url })
+          const browserName = typeof args['navegador'] === 'string' ? args['navegador'] : typeof args['browser'] === 'string' ? args['browser'] : undefined
+          const res = await this.after(id, await this.deps.host(id, 'open', { url, ...(browserName ? { browser: browserName } : {}) }), { ...step, detail: url })
           if (args['abrir_janela'] === true) {
             await this.action(agent, 'show')
           }
@@ -408,7 +448,9 @@ export class Browser {
           if ('error' in spot) return { result: textResult(spot.error, true) }
           const label = 'el' in spot ? spot.el.label : target
           this.update(id, { doing: { label: L('Clicando em', 'Clicking'), detail: label || target } })
-          if (risky(label || target)) {
+          const isSocialSite = SOCIAL_SITES.test(page.url)
+          const isAuto = agent.autoApprove?.includes('navegador') || agent.autoApprove?.includes('navegador_clicar') || agent.autoApprove?.includes(CLICAR)
+          if (!isSocialSite && !isAuto && risky(label || target)) {
             const shot = page.frame ? { frame: page.frame } : await this.deps.host(id, 'frame')
             const artifact = shot.frame ? this.keep(id, ctx, Buffer.from(shot.frame, 'base64'), L(`Antes de clicar em "${label}"`, `Before clicking "${label}"`), page.url) : undefined
             const why = typeof args['motivo'] === 'string' ? args['motivo'].trim() : ''
@@ -473,6 +515,33 @@ export class Browser {
             result: { content: [{ type: 'image', data: r.frame, mimeType: 'image/jpeg' }, { type: 'text', text: L(`Tela de ${r.url}${artifact ? ', mostrada no chat' : ''}.`, `Screen of ${r.url}${artifact ? ', shown in the chat' : ''}.`) }] },
             artifact
           }
+        }
+        case 'navegador_enviar_arquivo': {
+          const raw = args['arquivos'] ?? args['arquivo'] ?? args['files'] ?? args['file']
+          const list = (Array.isArray(raw) ? raw : [raw]).filter(Boolean).map(String)
+          if (list.length === 0) return { result: textResult(L('Faltou a lista de arquivos para enviar.', 'Missing files to upload.'), true) }
+
+          const resolvedFiles: string[] = []
+          for (const item of list) {
+            let p = item.trim()
+            if (process.platform === 'win32') {
+              p = p.replace(/^\/([a-zA-Z])(\/.*)?$/, '$1:$2').replace(/\//g, '\\')
+            }
+            if (!isAbsolute(p) && ctx.project) {
+              const candidate = join(ctx.project, p)
+              if (existsSync(candidate)) p = candidate
+              else {
+                const subCandidate = join(ctx.project, 'paperx', 'output', 'social-56d', p)
+                if (existsSync(subCandidate)) p = subCandidate
+                else p = candidate
+              }
+            }
+            resolvedFiles.push(p)
+          }
+
+          this.update(id, { doing: { label: L('Enviando arquivos', 'Uploading files'), detail: resolvedFiles.map((f) => basename(f)).join(', ') } })
+          const r = await this.deps.host(id, 'upload', { files: resolvedFiles, seletor: args['seletor'] })
+          return { result: await this.after(id, r, { label: L('Enviou arquivo', 'Uploaded file'), detail: resolvedFiles.map((f) => basename(f)).join(', ') }) }
         }
         default:
           return { result: textResult(L(`Ferramenta desconhecida: ${name}`, `Unknown tool: ${name}`), true) }

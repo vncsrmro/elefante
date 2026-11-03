@@ -809,7 +809,7 @@ export class Runner {
           flush()
           msg.run = { ...msg.run!, browser: true, steps: [...closeThinking('done', THOUGHT()), step] }
           save()
-          const out = await browser.call(current, name, args, { conversationId: conv.id, messageId: msg.id })
+          const out = await browser.call(current, name, args, { conversationId: conv.id, messageId: msg.id, project: conv.project })
           if (out.artifact) artifactIds.push(out.artifact.id)
           const close = (status: Step['status'], patch: Partial<Step> = {}): Step[] => msg.run!.steps.map((s) => (s.id === step.id ? { ...s, ...patch, status, ms: Date.now() - t0 } : s))
           if (out.approval) {
@@ -1458,30 +1458,41 @@ export class Runner {
   }
 
   // The user took over the agent's browser ("Assumir") and handed it back
-  // ("Devolver" or closing the window) — exactly what the agent asked for with
-  // ask_user, so it goes on by itself instead of waiting for a message.
+  // ("Devolver" or closing the window) — resumes execution automatically.
   async handedBack(agentId: string): Promise<void> {
     // Paused, nobody starts working: the question stays pending, as a message would leave it.
     if (this.paused) return
     const agent = this.deps.db.agent(agentId)
     if (!agent || agent.archived) return
-    let hit: { conv: Conversation; asked: Message } | undefined // the latest pending question of this agent, any conversation
+    let hit: { conv: Conversation; asked?: Message } | undefined
     for (const conv of this.deps.db.conversations()) {
       const asked = this.deps.db
         .recentMessages(conv.id, 50)
         .reverse()
         .find((m) => m.author.kind === 'agent' && m.author.id === agentId && m.run?.status === 'waiting_input')
-      if (asked && (!hit || asked.at > hit.asked.at)) hit = { conv, asked }
+      if (asked && (!hit || asked.at > (hit.asked?.at ?? 0))) hit = { conv, asked }
+    }
+    // If no waiting_input question, check recent messages where this agent used the browser or requested takeover
+    if (!hit) {
+      for (const conv of this.deps.db.conversations()) {
+        const browserMsg = this.deps.db
+          .recentMessages(conv.id, 30)
+          .reverse()
+          .find((m) => m.author.kind === 'agent' && m.author.id === agentId && (m.run?.browser || /navegador|instagram|flow|login|assumir/i.test(m.text)))
+        if (browserMsg && (!hit || browserMsg.at > (hit.asked?.at ?? 0))) hit = { conv, asked: browserMsg }
+      }
     }
     if (!hit) return
     const { conv, asked } = hit
-    this.update(asked, { run: { ...asked.run!, status: 'done' } })
+    if (asked?.run?.status === 'waiting_input') {
+      this.update(asked, { run: { ...asked.run!, status: 'done' } })
+    }
     const { workspaceName } = await this.deps.settings()
     this.enqueue(() =>
       this.execute(agent, conv, {
         depth: 1,
-        work: asked.run?.work,
-        task: L(`${workspaceName} devolveu o controle do seu navegador. Continue de onde parou.`, `${workspaceName} handed your browser back. Pick up where you left off.`)
+        work: asked?.run?.work,
+        task: L(`${workspaceName} devolveu o controle do seu navegador. Continue a execução a partir do ponto atual na página aberta com total autonomia.`, `${workspaceName} handed your browser back. Pick up execution from the current page with full autonomy.`)
       })
     )
   }
