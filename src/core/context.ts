@@ -118,10 +118,14 @@ export function systemPrompt(opts: {
         `- Só use a ferramenta ask_user se houver algo ABSOLUTAMENTE IMPEDITIVO ou absurdo (ex.: falta de credencial crítica não encontrada nos arquivos locais, conta deslogada sem senha, conflito que exige decisão humana). Para todo o resto, tome a melhor decisão técnica e prossiga autonomamente até o fim.`,
         `- Only use the ask_user tool if there is an ABSOLUTELY IMPEDING or absurd blocker (e.g. missing critical credential not found in local files, logged out account with no password, conflict requiring human decision). For everything else, make the best technical decision and proceed autonomously to the end.`
       ),
+      L(
+        '- Planejamento com To-Do List: ao receber qualquer tarefa técnica, workflow ou pedido com mais de um passo, planeje imediatamente chamando a ferramenta gerenciar_tarefas com a lista de afazeres. Conforme executa cada ação e avança com suas ferramentas, chame gerenciar_tarefas novamente atualizando os itens para "in_progress" e "done". Nunca deixe tarefas sem dar check no que concluiu.',
+        '- Planning with To-Do List: when receiving any technical task, workflow or multi-step request, plan immediately calling the gerenciar_tarefas tool with the checklist. As you execute each action and advance with your tools, call gerenciar_tarefas again updating items to "in_progress" and "done". Never leave completed tasks unchecked.'
+      ),
       canRemember &&
         L(
-          `- Quando aprender algo que vai continuar valendo em outras conversas (uma preferência de ${me}, um jeito de trabalhar, um fato durável do projeto), guarde com a ferramenta lembrar, uma ideia por vez. Se algo lembrado mudou, use substitui com o id. Não guarde o que só importa nesta conversa.`,
-          `- When you learn something that will keep holding in other conversations (a preference of ${me}'s, a way of working, a lasting fact about the project), save it with the lembrar tool, one idea at a time. If something remembered changed, use substitui with its id. Don't save what only matters in this conversation.`
+          `- Aprendizado contínuo: quando descobrir uma regra de negócio, padrão de código, solução de um bug ou preferência de ${me}, guarde com a ferramenta lembrar especificando a categoria apropriada ("regra", "projeto", "solucao", "preferencia", "ferramenta"). Se algo lembrado mudou, use substitui com o id.`,
+          `- Continuous learning: when discovering a business rule, code pattern, bug solution or preference of ${me}, save with the lembrar tool specifying the appropriate category ("regra", "projeto", "solucao", "preferencia", "ferramenta"). If something remembered changed, use substitui with its id.`
         ),
       routines &&
         L(
@@ -314,7 +318,8 @@ function windowsShell(): string {
 }
 
 function memorySection(me: string, m: { aboutMe: Memory[]; own: Memory[]; searchable?: number }): string {
-  const list = (ms: Memory[]): string => ms.map((x) => `- [${x.id}] ${x.text}`).join('\n')
+  const cat = (x: Memory): string => (x.category ? `[${x.category.toUpperCase()}] ` : '')
+  const list = (ms: Memory[]): string => ms.map((x) => `- [${x.id}] ${cat(x)}${x.text}`).join('\n')
   return [
     L('## O que você lembra', '## What you remember'),
     L(

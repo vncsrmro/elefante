@@ -1,5 +1,5 @@
 // The contract between the renderer and the core, carried over a MessagePort.
-import type { Os, Agent, ApiProviderId, BrowserInput, Approval, Artifact, ImageUpload, BrowserView, CloudCliId, CloudCliInfo, ComputerInfo, Connector, ConnectorInput, ConnectorTool, HarnessMcp, Conversation, EngineId, HostDiscoveryResult, Memory, MemoryScope, Message, ProjectCliContext, ProjectFileItem, ProjectFileInfo, Routine, RoutineInput, Report, Settings, LocalSkill, Skill, SkillInput, SkillVersion, Trigger, UsageReport } from './types'
+import type { Os, Agent, ApiProviderId, BrowserInput, Approval, Artifact, ImageUpload, BrowserView, CloudCliId, CloudCliInfo, ComputerInfo, Connector, ConnectorInput, ConnectorTool, HarnessMcp, Conversation, EngineId, HostDiscoveryResult, Memory, MemoryCategory, MemoryScope, Message, ProjectCliContext, ProjectFileItem, ProjectFileInfo, Routine, RoutineInput, Report, Settings, LocalSkill, Skill, SkillInput, SkillVersion, Trigger, UsageReport } from './types'
 
 export interface Snapshot {
   settings: Settings
@@ -58,8 +58,8 @@ export interface Api {
   importHarnessMcp(p: { key: string }): Promise<string> // adds one as a connector; its secrets never pass through the screen
   updateTool(p: { connectorId: string; name: string; patch: Partial<Pick<ConnectorTool, 'cls' | 'enabled' | 'highRisk'>> }): void
   decideApproval(p: { id: string; decision: 'approved' | 'refused'; reason?: string; always?: boolean }): void // always: the agent may use that tool without asking again
-  addMemory(p: { scope: MemoryScope; text: string }): void
-  editMemory(p: { id: string; text: string }): void
+  addMemory(p: { scope: MemoryScope; text: string; category?: MemoryCategory }): void
+  editMemory(p: { id: string; text: string; category?: MemoryCategory }): void
   confirmMemory(p: { id: string }): void // "still valid"
   decideMemory(p: { id: string; accept: boolean }): void // a pending one
   forgetMemory(p: { id: string; reason?: string }): void

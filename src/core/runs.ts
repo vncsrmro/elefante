@@ -4,7 +4,7 @@ import { randomUUID } from 'node:crypto'
 import { L, locale } from '../shared/lang'
 import type { CoreEvent } from '../shared/rpc'
 import type { CallToolResult } from '@modelcontextprotocol/sdk/types.js'
-import { ACCESS_REQUEST, CACHE_READ_WEIGHT, describeSchedule, workIn, ENGINES, ERRORS_STOP, usable, modelInfo, REPEAT_STOP, REPEAT_WARN, RUN_BUDGET_PCT, RUN_STALL_MINUTES, IMAGE_MIMES, MAX_IMAGE_BYTES, MAX_IMAGES_PER_MESSAGE, type Agent, type Approval, type Artifact, type ImageUpload, type Connector, type ConnectorTool, type Conversation, type EngineId, type Message, type Quota, type Receipt, type Routine, type Run, type RunStatus, type Settings, type Step } from '../shared/types'
+import { ACCESS_REQUEST, CACHE_READ_WEIGHT, describeSchedule, workIn, ENGINES, ERRORS_STOP, usable, modelInfo, REPEAT_STOP, REPEAT_WARN, RUN_BUDGET_PCT, RUN_STALL_MINUTES, IMAGE_MIMES, MAX_IMAGE_BYTES, MAX_IMAGES_PER_MESSAGE, type Agent, type Approval, type Artifact, type ImageUpload, type Connector, type ConnectorTool, type Conversation, type EngineId, type Message, type Quota, type Receipt, type Routine, type Run, type RunStatus, type Settings, type Step, type TodoItem, type TodoStatus } from '../shared/types'
 import { HISTORY_LIMIT, mentioned, systemPrompt, transcriptBlocks } from './context'
 import { BUSCAR_MEMORIAS, LEMBRAR, type Memories } from './memory'
 import { BROWSER_TOOL_NAMES, browserStep, browserTools, NAVEGADOR, type Browser } from './browser'
@@ -50,6 +50,45 @@ export const ASK_USER: ToolDef = {
       type: 'object' as const,
       properties: { question: { type: 'string', description: L('A pergunta, curta e direta.', 'The question, short and direct.') } },
       required: ['question']
+    }
+  }
+}
+
+export const GERENCIAR_TAREFAS: ToolDef = {
+  name: 'gerenciar_tarefas',
+  get description() {
+    return L(
+      'Cria ou atualiza a lista de tarefas (To-Do List) desta tarefa no Elefante. Use no início de qualquer tarefa técnica, workflow ou pedido com múltiplos passos para planejar o checklist. Conforme avança, chame novamente marcando as tarefas com "in_progress" e "done".',
+      'Creates or updates the to-do list for this task in Elefante. Use at the start of any technical task, workflow or multi-step request to plan the checklist. As you progress, call again marking tasks with "in_progress" and "done".'
+    )
+  },
+  get inputSchema() {
+    return {
+      type: 'object' as const,
+      properties: {
+        tarefas: {
+          type: 'array',
+          description: L(
+            'Lista de tarefas. Cada item deve conter um título e o status: pending, in_progress, done ou cancelled.',
+            'List of tasks. Each item must contain a title and status: pending, in_progress, done or cancelled.'
+          ),
+          items: {
+            type: 'object',
+            properties: {
+              id: { type: 'string', description: L('ID da tarefa (opcional).', 'Task ID (optional).') },
+              titulo: { type: 'string', description: L('Título da tarefa.', 'Task title.') },
+              title: { type: 'string', description: 'Task title (alternative).' },
+              status: {
+                type: 'string',
+                enum: ['pending', 'in_progress', 'done', 'cancelled'],
+                description: L('Status da tarefa: pending (pendente), in_progress (em andamento), done (concluída), cancelled (cancelada).', 'Task status: pending, in_progress, done, cancelled.')
+              }
+            },
+            required: ['status']
+          }
+        }
+      },
+      required: ['tarefas']
     }
   }
 }
@@ -569,7 +608,7 @@ export class Runner {
     const services: string[] = []
     const routineIds: string[] = []
     const exposed = new Map<string, Exposed>()
-    const taken = new Set<string>([ASK_USER.name, ACCESS_REQUEST, ABRIR_PR, LEMBRAR.name, ...COMPUTER_TOOL_NAMES, ...BROWSER_TOOL_NAMES, ...APP_TOOL_NAMES, ...ROUTINE_TOOL_NAMES, ...SKILL_TOOL_NAMES])
+    const taken = new Set<string>([ASK_USER.name, GERENCIAR_TAREFAS.name, ACCESS_REQUEST, ABRIR_PR, LEMBRAR.name, ...COMPUTER_TOOL_NAMES, ...BROWSER_TOOL_NAMES, ...APP_TOOL_NAMES, ...ROUTINE_TOOL_NAMES, ...SKILL_TOOL_NAMES])
     for (const c of this.deps.connectors?.list() ?? []) {
       if (c.status !== 'connected') continue
       for (const t of db.tools(c.id)) if (allowed(t, agent.grants[c.id])) exposed.set(exposedName(c, t.name, taken), { connector: c, tool: t })
@@ -619,6 +658,7 @@ export class Runner {
       : undefined
     const toolDefs: ToolDef[] = [
       ASK_USER,
+      GERENCIAR_TAREFAS,
       ...(accessTool ? [accessTool] : []),
       ...(prTool ? [prTool] : []),
       ...(canRemember ? [LEMBRAR] : []),
@@ -667,6 +707,27 @@ export class Runner {
               `Question sent to ${settings.workspaceName}. End your reply now with one sentence at most, without repeating the question. The answer comes in the next message.`
             )
           )
+        }
+
+        if (name === GERENCIAR_TAREFAS.name) {
+          const rawList = Array.isArray(args['tarefas']) ? args['tarefas'] : Array.isArray(args['tasks']) ? args['tasks'] : Array.isArray(args['todos']) ? args['todos'] : []
+          if (!rawList.length) return textResult(L('A lista de tarefas não pode ser vazia.', 'Task list cannot be empty.'), true)
+          const todos: TodoItem[] = rawList.map((item: any, idx: number) => {
+            const rawObj = (item && typeof item === 'object') ? item : { titulo: String(item) }
+            const title = typeof rawObj.titulo === 'string' ? rawObj.titulo.trim() : typeof rawObj.title === 'string' ? rawObj.title.trim() : ''
+            const rawStatus = typeof rawObj.status === 'string' ? rawObj.status.toLowerCase() : 'pending'
+            const status: TodoStatus = ['pending', 'in_progress', 'done', 'cancelled'].includes(rawStatus) ? (rawStatus as TodoStatus) : 'pending'
+            const id = typeof rawObj.id === 'string' && rawObj.id.trim() ? rawObj.id.trim() : `todo_${idx + 1}`
+            return { id, title: title || `Tarefa ${idx + 1}`, status }
+          })
+          msg.run = { ...msg.run!, todos }
+          const doneCount = todos.filter((t) => t.status === 'done').length
+          const inProgress = todos.find((t) => t.status === 'in_progress')
+          const detail = inProgress ? `${doneCount}/${todos.length} · ${inProgress.title}` : `${doneCount}/${todos.length} ${L('concluídas', 'completed')}`
+          addSteps({ id: randomUUID(), label: L('Plano de tarefas (To-Do)', 'Task plan (To-Do)'), detail, status: 'done' })
+          save()
+          emit({ type: 'message', message: msg })
+          return textResult(L(`To-Do atualizado (${doneCount}/${todos.length} concluídas). Prossiga com a execução.`, `To-Do updated (${doneCount}/${todos.length} completed). Proceed with execution.`))
         }
 
         if (name === PROPOR_AGENTE.name && builds) {
@@ -1213,7 +1274,7 @@ export class Runner {
       }
     }
 
-    const base = { depth: opts.depth, work, receipt, question, approvalId: approval?.id, memoryIds: memoryIds.length ? memoryIds : undefined, artifactIds: artifactIds.length ? artifactIds : undefined, services: services.length ? services : undefined, routineIds: routineIds.length ? routineIds : undefined, browser: msg.run?.browser, agentDraft: msg.run?.agentDraft }
+    const base = { depth: opts.depth, work, receipt, question, approvalId: approval?.id, memoryIds: memoryIds.length ? memoryIds : undefined, artifactIds: artifactIds.length ? artifactIds : undefined, services: services.length ? services : undefined, routineIds: routineIds.length ? routineIds : undefined, browser: msg.run?.browser, agentDraft: msg.run?.agentDraft, todos: msg.run?.todos }
     if (control.reason === 'stopped') {
       save({ run: { ...base, status: 'stopped', steps: closeThinking('error', L('Parado', 'Stopped')) } })
     } else if (control.reason === 'loop' || control.reason === 'errors' || control.reason === 'stall') {
@@ -1246,6 +1307,9 @@ export class Runner {
       // The Mac tells you when it's your turn: a question, or the end of the work (once, when no other agent takes it on).
       if (question) this.deps.notify?.(L(`${agent.name} te perguntou`, `${agent.name} asked you`), question, conv.id, 'question')
       else if (!approval && !this.chain(agent, conv, msg, opts.depth) && !opts.routine) this.deps.notify?.(L(`${agent.name} terminou`, `${agent.name} is done`), outcome(msg) || L('Respondeu na conversa.', 'Replied in the conversation.'), conv.id, 'done')
+      if (result && !question && !approval) {
+        void this.deps.memory?.autoLearn(agent, conv, msg)
+      }
     } else {
       save({ run: { ...base, status: 'failed', steps: closeThinking('error', L('Falhou', 'Failed')), error: error ?? L('O motor terminou sem resposta.', 'The engine ended without a reply.') } })
     }

@@ -21,6 +21,7 @@ import {
   type GrantLevel,
   type LocalSkill,
   type Memory,
+  type MemoryCategory,
   type MemoryScope,
   type Message,
   type Model,
@@ -33,6 +34,7 @@ import {
   type Report,
   type UsageReport,
   type Trigger,
+  type TodoItem,
   type ImageUpload,
   type Os
 } from '../../shared/types'
@@ -443,8 +445,8 @@ export const continueRun = (messageId: string): void => void call('continueRun',
 export const decideApproval = (id: string, decision: 'approved' | 'refused', reason?: string, always?: boolean): void =>
   void call('decideApproval', { id, decision, reason, always })
 
-export const addMemory = (scope: MemoryScope, text: string): void => void call('addMemory', { scope, text })
-export const editMemory = (id: string, text: string): void => void call('editMemory', { id, text })
+export const addMemory = (scope: MemoryScope, text: string, category?: MemoryCategory): void => void call('addMemory', { scope, text, category })
+export const editMemory = (id: string, text: string, category?: MemoryCategory): void => void call('editMemory', { id, text, category })
 export const confirmMemory = (id: string): void => void call('confirmMemory', { id })
 export const decideMemory = (id: string, accept: boolean): void => void call('decideMemory', { id, accept })
 export const forgetMemory = (id: string, reason?: string): void => void call('forgetMemory', { id, reason })

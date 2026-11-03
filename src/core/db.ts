@@ -1,5 +1,5 @@
 import { DatabaseSync } from 'node:sqlite'
-import { CACHE_READ_WEIGHT, type Agent, type AgentApp, type AgentColor, type Approval, type ApprovalState, type Artifact, type ArtifactKind, type Author, type Connector, type ConnectorAuth, type ConnectorTool, type Conversation, type Effort, type LentFolder, type Memory, type MemoryMode, type MemoryState, type Message, type Receipt, type Routine, type RoutineRun, type Run, type Settings, type Skill, type SkillVersion, type ToolClass, type Trigger } from '../shared/types'
+import { CACHE_READ_WEIGHT, type Agent, type AgentApp, type AgentColor, type Approval, type ApprovalState, type Artifact, type ArtifactKind, type Author, type Connector, type ConnectorAuth, type ConnectorTool, type Conversation, type Effort, type LentFolder, type Memory, type MemoryCategory, type MemoryMode, type MemoryState, type Message, type Receipt, type Routine, type RoutineRun, type Run, type Settings, type Skill, type SkillVersion, type ToolClass, type Trigger } from '../shared/types'
 
 // Each entry runs once, in order; PRAGMA user_version records how far we got.
 const MIGRATIONS = [
@@ -221,6 +221,9 @@ const MIGRATIONS = [
   `,
   `
   ALTER TABLE agents ADD COLUMN apps TEXT NOT NULL DEFAULT '[]';
+  `,
+  `
+  ALTER TABLE memories ADD COLUMN category TEXT;
   `
 ]
 
@@ -727,6 +730,7 @@ export class Db {
       id: str(r['id']),
       scope: str(r['scope']),
       text: str(r['text']),
+      category: r['category'] ? (str(r['category']) as MemoryCategory) : undefined,
       state: str(r['state']) as MemoryState,
       origin: str(r['origin']) as Memory['origin'],
       agentId: r['agent_id'] ? str(r['agent_id']) : undefined,
@@ -739,11 +743,13 @@ export class Db {
     }
   }
 
-  memories(filter: { scope?: string; state?: MemoryState } = {}): Memory[] {
+  memories(filter: { scope?: string; state?: MemoryState; category?: MemoryCategory; agentId?: string } = {}): Memory[] {
     const where: string[] = []
     const args: string[] = []
     if (filter.scope) where.push('scope = ?'), args.push(filter.scope)
     if (filter.state) where.push('state = ?'), args.push(filter.state)
+    if (filter.category) where.push('category = ?'), args.push(filter.category)
+    if (filter.agentId) where.push('agent_id = ?'), args.push(filter.agentId)
     const sql = `SELECT * FROM memories${where.length ? ` WHERE ${where.join(' AND ')}` : ''} ORDER BY created_at`
     return (this.db.prepare(sql).all(...args) as Row[]).map((r) => this.toMemory(r))
   }
@@ -756,11 +762,11 @@ export class Db {
   saveMemory(m: Memory): void {
     this.db
       .prepare(
-        `INSERT INTO memories (id, scope, text, state, origin, agent_id, conversation_id, message_ids, replaces, reason, created_at, confirmed_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-         ON CONFLICT (id) DO UPDATE SET text = excluded.text, state = excluded.state, reason = excluded.reason, confirmed_at = excluded.confirmed_at`
+        `INSERT INTO memories (id, scope, text, category, state, origin, agent_id, conversation_id, message_ids, replaces, reason, created_at, confirmed_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+         ON CONFLICT (id) DO UPDATE SET text = excluded.text, category = excluded.category, state = excluded.state, reason = excluded.reason, confirmed_at = excluded.confirmed_at`
       )
-      .run(m.id, m.scope, m.text, m.state, m.origin, m.agentId ?? null, m.conversationId ?? null, JSON.stringify(m.messageIds), m.replaces ?? null, m.reason ?? null, m.createdAt, m.confirmedAt)
+      .run(m.id, m.scope, m.text, m.category ?? null, m.state, m.origin, m.agentId ?? null, m.conversationId ?? null, JSON.stringify(m.messageIds), m.replaces ?? null, m.reason ?? null, m.createdAt, m.confirmedAt)
   }
 
   deleteMemory(id: string): void {

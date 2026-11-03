@@ -133,6 +133,13 @@ export interface Step {
   ms?: number
 }
 
+export type TodoStatus = 'pending' | 'in_progress' | 'done' | 'cancelled'
+export interface TodoItem {
+  id: string
+  title: string
+  status: TodoStatus
+}
+
 export interface Receipt {
   model: string
   inputTokens: number // everything sent, including cache reads
@@ -147,6 +154,7 @@ export type RunStatus = 'working' | 'waiting_input' | 'waiting_approval' | 'done
 export interface Run {
   status: RunStatus
   steps: Step[]
+  todos?: TodoItem[]
   receipt?: Receipt
   approvalId?: string
   error?: string
@@ -458,14 +466,16 @@ export interface Approval {
 // 'me' memories go to every agent; otherwise the scope is the id of the one agent they belong to.
 export type MemoryScope = 'me' | string
 export type MemoryState = 'active' | 'pending' | 'archived' | 'forgotten'
+export type MemoryCategory = 'regra' | 'projeto' | 'solucao' | 'preferencia' | 'ferramenta' | 'geral'
 
 export interface Memory {
   id: string
   scope: MemoryScope
   text: string
+  category?: MemoryCategory
   state: MemoryState
-  origin: 'agent' | 'extraction' | 'me'
-  agentId?: string // the agent that saved it, when origin is 'agent'
+  origin: 'agent' | 'extraction' | 'me' | 'auto_learning'
+  agentId?: string // the agent that saved it, when origin is 'agent' or 'auto_learning'
   conversationId?: string
   messageIds: string[] // evidence
   replaces?: string // the memory this one supersedes; it becomes archived when this one is active

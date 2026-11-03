@@ -40,6 +40,7 @@ import {
   type ImageUpload,
   type Message,
   type Step,
+  type TodoItem,
   IMAGE_MIMES,
   MAX_IMAGES_PER_MESSAGE,
   isTeam
@@ -326,6 +327,7 @@ function MessageRow({ message, grouped }: { message: Message; grouped: boolean }
             <span className="msg__time">{time(message.at)}</span>
           </div>
         )}
+        {message.run?.todos && message.run.todos.length > 0 && <RunTodos todos={message.run.todos} />}
         {message.run && <RunSteps message={message} />}
         {message.text ? (
           <div className="md">
@@ -624,6 +626,59 @@ function useNow(on: boolean): number {
     return () => clearInterval(t)
   }, [on])
   return now
+}
+
+function RunTodos({ todos }: { todos: TodoItem[] }): ReactNode {
+  const [open, setOpen] = useState(true)
+  const done = todos.filter((t) => t.status === 'done').length
+  const total = todos.length
+  const pct = Math.round((done / total) * 100)
+
+  return (
+    <div className={`todos-card ${open ? 'is-open' : ''}`}>
+      <button className="todos-card__toggle" onClick={() => setOpen(!open)} type="button">
+        <span className="todos-card__chev">
+          <Icon name="chevron" size={12} />
+        </span>
+        <span className="todos-card__title">
+          📋 {L('Tarefas planejadas (To-Do)', 'Task plan (To-Do)')}
+        </span>
+        <span className="todos-card__badge">{done}/{total}</span>
+        <div className="todos-card__bar">
+          <div className="todos-card__bar-fill" style={{ width: `${pct}%` }} />
+        </div>
+        <span className="todos-card__pct">{pct}%</span>
+      </button>
+      {open && (
+        <ul className="todos-card__list">
+          {todos.map((todo) => {
+            const isDone = todo.status === 'done'
+            const isWorking = todo.status === 'in_progress'
+            const isCancelled = todo.status === 'cancelled'
+            return (
+              <li key={todo.id} className={`todo-item todo-item--${todo.status}`}>
+                <span className="todo-item__status">
+                  {isDone ? (
+                    <span className="todo-item__icon todo-item__icon--done"><Icon name="check" size={11} /></span>
+                  ) : isWorking ? (
+                    <span className="todo-item__pulse" />
+                  ) : isCancelled ? (
+                    <span className="todo-item__dash">–</span>
+                  ) : (
+                    <span className="todo-item__circle" />
+                  )}
+                </span>
+                <span className="todo-item__title">{todo.title}</span>
+                {isWorking && (
+                  <span className="todo-item__tag">{L('em andamento', 'in progress')}</span>
+                )}
+              </li>
+            )
+          })}
+        </ul>
+      )}
+    </div>
+  )
 }
 
 // One quiet line: what the agent is doing now (and for how long), or how many

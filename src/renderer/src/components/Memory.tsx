@@ -17,6 +17,7 @@ import {
   STALE_DAYS,
   type Agent,
   type Memory,
+  type MemoryCategory,
   isTeam
 } from '../store'
 import { Sheet } from './Pages'
@@ -35,6 +36,7 @@ export function MemoryPage(): ReactNode {
   const agents = useStore((s) => s.agents.filter(isTeam))
   const me = useStore((s) => s.me.name)
   const [tab, setTab] = useState<Tab>('all')
+  const [catFilter, setCatFilter] = useState<'all' | MemoryCategory>('all')
   const [q, setQ] = useState('')
   const [finding, setFinding] = useState(false)
   const find = useRef<HTMLInputElement>(null)
@@ -42,7 +44,11 @@ export function MemoryPage(): ReactNode {
     if (finding) find.current?.focus()
   }, [finding])
 
-  const hit = (m: Memory): boolean => !q.trim() || norm(m.text).includes(norm(q.trim()))
+  const hit = (m: Memory): boolean => {
+    const matchesQ = !q.trim() || norm(m.text).includes(norm(q.trim())) || (m.category ? norm(m.category).includes(norm(q.trim())) : false)
+    const matchesCat = catFilter === 'all' || m.category === catFilter
+    return Boolean(matchesQ && matchesCat)
+  }
   const pending = memories.filter((m) => m.state === 'pending')
   const stale = memories.filter((m) => isStale(m))
   const forgotten = memories.filter((m) => m.state === 'forgotten')
@@ -59,7 +65,7 @@ export function MemoryPage(): ReactNode {
   )
 
   return (
-    <Sheet title={L('Memória', 'Memory')} lede={L('O que os agentes sabem sobre você e o seu trabalho.', 'What the agents know about you and your work.')}>
+    <Sheet title={L('Memória & Regras', 'Memory & Rules')} lede={L('O que os agentes aprendem sobre você, seu projeto e seus padrões de trabalho.', 'What the agents learn about you, your project, and your work patterns.')}>
       <nav className="tabs-line">
         {tabBtn('all', L('Tudo', 'All'))}
         {tabBtn('me', L('Sobre você', 'About you'))}
@@ -84,6 +90,27 @@ export function MemoryPage(): ReactNode {
           </button>
         )}
       </nav>
+
+      <div className="memory-categories-line">
+        <span className="memory-categories-label">{L('Categoria:', 'Category:')}</span>
+        {[
+          { id: 'all', label: L('Todas', 'All') },
+          { id: 'regra', label: L('📐 Regras & Padrões', '📐 Rules & Standards') },
+          { id: 'projeto', label: L('⚙️ Projeto & Setup', '⚙️ Project & Setup') },
+          { id: 'solucao', label: L('💡 Soluções & Fixes', '💡 Solutions & Fixes') },
+          { id: 'preferencia', label: L('👤 Preferências', '👤 Preferences') },
+          { id: 'ferramenta', label: L('🛠️ Ferramentas', '🛠️ Tools') },
+        ].map((c) => (
+          <button
+            key={c.id}
+            type="button"
+            className={`memory-cat-pill ${catFilter === c.id ? 'is-active' : ''} ${c.id !== 'all' ? `memory-cat-pill--${c.id}` : ''}`}
+            onClick={() => setCatFilter(c.id as 'all' | MemoryCategory)}
+          >
+            {c.label}
+          </button>
+        ))}
+      </div>
 
       {review > 0 && tab !== 'review' && tab !== 'forgotten' && (
         <div className="notice-line">
@@ -189,9 +216,31 @@ function Meta({ memory, searchable }: { memory: Memory; searchable?: boolean }):
   const agent = useStore((s) => (memory.agentId ? agentById(s, memory.agentId) : undefined))
   const conv = useStore((s) => s.conversations.find((c) => c.id === memory.conversationId))
   const dmWith = useStore((s) => (conv?.kind === 'dm' ? agentById(s, conv.name)?.name : undefined))
-  const who = memory.origin === 'agent' ? L(`${agent?.name ?? 'Um agente'} ${memory.state === 'pending' ? 'quer guardar' : 'guardou'}`, `${agent?.name ?? 'An agent'} ${memory.state === 'pending' ? 'wants to keep this' : 'kept this'}`) : memory.origin === 'extraction' ? L('Aprendida', 'Learned') : L('Você escreveu', 'You wrote this')
+  const who =
+    memory.origin === 'auto_learning'
+      ? L(`🤖 Aprendido sozinho por ${agent?.name ?? 'agente'}`, `🤖 Learned autonomously by ${agent?.name ?? 'an agent'}`)
+      : memory.origin === 'agent'
+        ? L(`${agent?.name ?? 'Um agente'} ${memory.state === 'pending' ? 'quer guardar' : 'guardou'}`, `${agent?.name ?? 'An agent'} ${memory.state === 'pending' ? 'wants to keep this' : 'kept this'}`)
+        : memory.origin === 'extraction'
+          ? L('Aprendida', 'Learned')
+          : L('Você escreveu', 'You wrote this')
+
+  const catLabels: Record<string, string> = {
+    regra: L('Regra', 'Rule'),
+    projeto: L('Projeto', 'Project'),
+    solucao: L('Solução', 'Solution'),
+    preferencia: L('Preferência', 'Preference'),
+    ferramenta: L('Ferramenta', 'Tool'),
+    geral: L('Geral', 'General')
+  }
+
   return (
     <span className="read-line__meta-text">
+      {memory.category && (
+        <span className={`cat-badge cat-badge--${memory.category}`}>
+          {catLabels[memory.category] || memory.category.toUpperCase()}
+        </span>
+      )}
       {who}
       {conv && (
         <>
@@ -230,6 +279,7 @@ function Line({ memory, searchable, shown, children }: { memory: Memory; searcha
 function EditableLine({ memory }: { memory: Memory }): ReactNode {
   const [editing, setEditing] = useState(false)
   const [text, setText] = useState(memory.text)
+  const [cat, setCat] = useState<MemoryCategory | undefined>(memory.category)
   const searchable = useStore((s) => splitForPrompt(s.memories.filter((m) => m.scope === memory.scope && m.state === 'active')).searchable.some((m) => m.id === memory.id))
   if (editing)
     return (
@@ -237,7 +287,7 @@ function EditableLine({ memory }: { memory: Memory }): ReactNode {
         className="read-line is-editing"
         onSubmit={(e) => {
           e.preventDefault()
-          editMemory(memory.id, text)
+          editMemory(memory.id, text, cat)
           setEditing(false)
         }}
       >
@@ -247,14 +297,22 @@ function EditableLine({ memory }: { memory: Memory }): ReactNode {
           value={text}
           onChange={(e) => setText(e.target.value)}
           onKeyDown={(e) => {
-            if (e.key === 'Escape') setEditing(false), setText(memory.text)
-            if (e.key === 'Enter' && !e.shiftKey && text.trim()) e.preventDefault(), editMemory(memory.id, text), setEditing(false)
+            if (e.key === 'Escape') setEditing(false), setText(memory.text), setCat(memory.category)
+            if (e.key === 'Enter' && !e.shiftKey && text.trim()) e.preventDefault(), editMemory(memory.id, text, cat), setEditing(false)
           }}
         />
         <div className="read-line__meta is-on">
+          <select className="read-cat-select" value={cat ?? 'geral'} onChange={(e) => setCat(e.target.value as MemoryCategory)}>
+            <option value="regra">{L('📐 Regra & Padrão', '📐 Rule & Standard')}</option>
+            <option value="projeto">{L('⚙️ Projeto & Setup', '⚙️ Project & Setup')}</option>
+            <option value="solucao">{L('💡 Solução & Bug', '💡 Solution & Bug')}</option>
+            <option value="preferencia">{L('👤 Preferência', '👤 Preference')}</option>
+            <option value="ferramenta">{L('🛠️ Ferramenta', '🛠️ Tool')}</option>
+            <option value="geral">{L('Geral', 'General')}</option>
+          </select>
           <span className="read-line__meta-text">{L('Enter salva · Esc cancela', 'Enter saves · Esc cancels')}</span>
           <span className="grow" />
-          <button type="button" className="text-btn" onClick={() => (setEditing(false), setText(memory.text))}>
+          <button type="button" className="text-btn" onClick={() => (setEditing(false), setText(memory.text), setCat(memory.category))}>
             {L('Cancelar', 'Cancel')}
           </button>
           <button className="text-btn text-btn--strong" disabled={!text.trim()}>
@@ -277,18 +335,26 @@ function EditableLine({ memory }: { memory: Memory }): ReactNode {
 
 function Add({ me }: { me: string }): ReactNode {
   const [text, setText] = useState('')
+  const [cat, setCat] = useState<MemoryCategory>('preferencia')
   return (
     <form
       className="read-add"
       onSubmit={(e) => {
         e.preventDefault()
         if (!text.trim()) return
-        addMemory('me', text)
+        addMemory('me', text, cat)
         setText('')
       }}
     >
       <Icon name="plus" size={15} />
       <input value={text} placeholder={L(`Ensinar algo sobre você. Ex.: ${me} prefere PRs pequenos.`, `Teach it something about you. E.g. ${me} prefers small PRs.`)} onChange={(e) => setText(e.target.value)} />
+      <select className="read-cat-select" value={cat} onChange={(e) => setCat(e.target.value as MemoryCategory)}>
+        <option value="preferencia">{L('👤 Preferência', '👤 Preference')}</option>
+        <option value="regra">{L('📐 Regra', '📐 Rule')}</option>
+        <option value="projeto">{L('⚙️ Projeto', '⚙️ Project')}</option>
+        <option value="solucao">{L('💡 Solução', '💡 Solution')}</option>
+        <option value="ferramenta">{L('🛠️ Ferramenta', '🛠️ Tool')}</option>
+      </select>
       {text.trim() && <span className="read-add__hint">{L('Enter guarda', 'Enter keeps it')}</span>}
     </form>
   )

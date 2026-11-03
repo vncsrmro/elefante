@@ -7,7 +7,7 @@ import { join } from 'node:path'
 import { randomBytes } from 'node:crypto'
 import { L } from '../shared/lang'
 import type { CoreEvent } from '../shared/rpc'
-import { ENGINES, usable, modelInfo, splitForPrompt, SUMMARY_MAX_AFTER, SUMMARY_WINDOW, type Agent, type Conversation, type EngineId, type Memory, type MemoryScope, type Message, type Settings } from '../shared/types'
+import { ENGINES, usable, modelInfo, splitForPrompt, SUMMARY_MAX_AFTER, SUMMARY_WINDOW, type Agent, type Conversation, type EngineId, type Memory, type MemoryCategory, type MemoryScope, type Message, type Settings } from '../shared/types'
 import type { Db } from './db'
 import type { Engine } from './engines/types'
 import type { ToolDef } from './gateway'
@@ -60,6 +60,14 @@ export const LEMBRAR: ToolDef = {
             '"usuario": about the person you talk to (holds for every agent). "agente": about your own work (only you see it).'
           )
         },
+        categoria: {
+          type: 'string',
+          enum: ['regra', 'projeto', 'solucao', 'preferencia', 'ferramenta', 'geral'],
+          description: L(
+            'Categoria da memória/regra: "regra" (padrões e diretrizes), "projeto" (arquitetura e setup), "solucao" (soluções de bugs e gotchas), "preferencia" (estilo e preferências), "ferramenta" (comandos de ferramentas).',
+            'Category of memory/rule: "regra" (standards and rules), "projeto" (architecture and setup), "solucao" (bug solutions and gotchas), "preferencia" (style and preferences), "ferramenta" (tool commands).'
+          )
+        },
         substitui: { type: 'string', description: L('Id de uma memória que esta atualiza, quando algo mudou.', 'Id of a memory this one updates, when something changed.') }
       },
       required: ['texto', 'sobre']
@@ -68,6 +76,12 @@ export const LEMBRAR: ToolDef = {
 }
 
 // The summary and the memories come out in the app's language.
+export const autoLearnSystem = (): string =>
+  L(
+    'Você analisa o trabalho de agentes de IA e extrai aprendizados duráveis, regras e padrões. Responda SOMENTE com JSON, sem texto em volta.',
+    'You analyze the work of AI agents and extract lasting learnings, rules and patterns. Reply ONLY with JSON, no text around it.'
+  )
+
 export const memorySystem = (): string =>
   L(
     [
@@ -287,7 +301,7 @@ export class Memories {
   // ---------- long term ----------
 
   // The one way memories come in, so every path gets the same checks.
-  private propose(p: { scope: MemoryScope; text: string; origin: Memory['origin']; agentId?: string; conversationId?: string; messageIds: string[]; replaces?: string; active: boolean }):
+  propose(p: { scope: MemoryScope; text: string; category?: MemoryCategory; origin: Memory['origin']; agentId?: string; conversationId?: string; messageIds: string[]; replaces?: string; active: boolean }):
     | { kind: 'forgotten' }
     | { kind: 'duplicate'; memory: Memory }
     | { kind: 'saved'; memory: Memory } {
@@ -296,7 +310,7 @@ export class Memories {
     if (db.memories({ scope: p.scope, state: 'forgotten' }).some((m) => normalize(m.text) === key)) return { kind: 'forgotten' }
     const same = db.memories({ scope: p.scope }).find((m) => (m.state === 'active' || m.state === 'pending') && normalize(m.text) === key)
     if (same) {
-      if (same.state === 'active') this.save({ ...same, confirmedAt: Date.now() })
+      if (same.state === 'active') this.save({ ...same, category: p.category ?? same.category, confirmedAt: Date.now() })
       return { kind: 'duplicate', memory: same }
     }
     const now = Date.now()
@@ -304,6 +318,7 @@ export class Memories {
       id: this.newId(),
       scope: p.scope,
       text: p.text,
+      category: p.category,
       state: p.active ? 'active' : 'pending',
       origin: p.origin,
       agentId: p.agentId,
@@ -331,12 +346,16 @@ export class Memories {
       if (old.scope !== scope) return { reply: L(`A memória ${old.id} é de outro escopo; use "sobre" igual ao dela.`, `Memory ${old.id} has a different scope; use the same "sobre" as it.`), error: true }
       replaces = old.id
     }
+    const rawCat = typeof args['categoria'] === 'string' ? args['categoria'] : typeof args['category'] === 'string' ? args['category'] : undefined
+    const category: MemoryCategory | undefined = rawCat && ['regra', 'projeto', 'solucao', 'preferencia', 'ferramenta', 'geral'].includes(rawCat.toLowerCase())
+      ? (rawCat.toLowerCase() as MemoryCategory)
+      : undefined
     const lastMine = this.deps.db
       .recentMessages(conv.id, 20)
       .reverse()
       .find((m) => m.author.kind === 'me')
     const active = agent.memory === 'auto'
-    const r = this.propose({ scope, text, origin: 'agent', agentId: agent.id, conversationId: conv.id, messageIds: lastMine ? [lastMine.id] : [], replaces, active })
+    const r = this.propose({ scope, text, category, origin: 'agent', agentId: agent.id, conversationId: conv.id, messageIds: lastMine ? [lastMine.id] : [], replaces, active })
     if (r.kind === 'forgotten') return { reply: L('Isso foi esquecido a pedido do usuário. Não guarde de novo nem mencione.', "That was forgotten at the user's request. Don't save it again or mention it.") }
     if (r.kind === 'duplicate') return { reply: L('Isso já está na memória.', "That's already in memory.") }
     return active
@@ -344,15 +363,17 @@ export class Memories {
       : { memory: r.memory, label: L('Quer guardar na memória', 'Wants to save to memory'), reply: L('Virou um pedido: o usuário decide se guarda. Siga com a resposta.', 'It became a request: the user decides whether to save it. Go on with your reply.') }
   }
 
-  add(scope: MemoryScope, text: string): void {
+  add(scope: MemoryScope, text: string, category?: MemoryCategory): void {
     const clean = text.trim().slice(0, MAX_MEMORY_CHARS)
-    if (clean) this.propose({ scope, text: clean, origin: 'me', messageIds: [], active: true })
+    if (clean) this.propose({ scope, text: clean, category, origin: 'me', messageIds: [], active: true })
   }
 
-  edit(id: string, text: string): void {
+  edit(id: string, text: string, category?: MemoryCategory): void {
     const m = this.deps.db.memory(id)
     const clean = text.trim().slice(0, MAX_MEMORY_CHARS)
-    if (m && clean && (m.state === 'active' || m.state === 'pending')) this.save({ ...m, text: clean, confirmedAt: Date.now() })
+    if (m && clean && (m.state === 'active' || m.state === 'pending')) {
+      this.save({ ...m, text: clean, category: category !== undefined ? category : m.category, confirmedAt: Date.now() })
+    }
   }
 
   confirm(id: string): void {
@@ -383,6 +404,60 @@ export class Memories {
     this.deps.db.setSummary(conversationId, text.trim())
     const conv = this.deps.db.conversation(conversationId)
     if (conv) this.deps.emit({ type: 'conversation', conversation: conv })
+  }
+
+  async autoLearn(agent: Agent, conv: Conversation, msg: Message): Promise<void> {
+    if (agent.memory === 'read') return
+    const steps = msg.run?.steps?.filter((s) => s.status !== 'running' && !['Pensou', 'Thought', 'Pausou', 'Paused'].includes(s.label)) ?? []
+    if (steps.length === 0 && msg.text.length < 80) return
+
+    const { db, engines } = this.deps
+    const settings = await this.deps.settings()
+    const model = usable(modelInfo(settings.memoryModel)) ?? modelInfo('haiku')!
+    const engine = engines[model.engine]
+    if (!engine || !settings.engines[model.engine]?.loggedIn) return
+
+    const recent = db.recentMessages(conv.id, 8)
+    const existing = db.memories({ scope: agent.id, state: 'active' })
+    const toolsUsed = steps.map((s) => s.label)
+
+    const prompt = autoLearnPrompt({
+      agent,
+      me: settings.workspaceName,
+      conversationName: conv.kind === 'channel' ? `#${conv.name}` : `DM com ${settings.workspaceName}`,
+      recentMessages: recent,
+      lastReply: msg.text,
+      toolsUsed,
+      existingMemories: existing
+    })
+
+    const cwd = join(this.deps.workDir, '_memory')
+    mkdirSync(cwd, { recursive: true })
+
+    try {
+      let outputText = ''
+      for await (const ev of engine.run({ model: model.id, effort: 'low', system: autoLearnSystem(), prompt, cwd, signal: AbortSignal.timeout(60_000) })) {
+        if (ev.type === 'text') outputText += ev.delta
+        else if (ev.type === 'done' && ev.text) outputText = ev.text
+      }
+      const learnings = parseAutoLearn(outputText)
+      const active = agent.memory === 'auto'
+      for (const item of learnings) {
+        const scope: MemoryScope = item.scope === 'usuario' ? 'me' : agent.id
+        this.propose({
+          scope,
+          text: item.text,
+          category: item.category,
+          origin: 'auto_learning',
+          agentId: agent.id,
+          conversationId: conv.id,
+          messageIds: [msg.id],
+          active
+        })
+      }
+    } catch (e) {
+      console.error('[memory:autoLearn]', e)
+    }
   }
 
   private archiveReplaced(m: Memory): void {
@@ -449,4 +524,67 @@ export function rankMemories(memories: Memory[], query: string, limit = 5): Memo
     .sort((x, y) => y.score - x.score || y.m.confirmedAt - x.m.confirmedAt)
     .slice(0, Math.min(Math.max(1, Math.floor(limit)), 10))
     .map((r) => r.m)
+}
+
+// ---------- auto learn ----------
+
+export function autoLearnPrompt(opts: {
+  agent: Agent
+  me: string
+  conversationName: string
+  recentMessages: Message[]
+  lastReply: string
+  toolsUsed: string[]
+  existingMemories: Memory[]
+}): string {
+  const { agent, me, conversationName, recentMessages, lastReply, toolsUsed, existingMemories } = opts
+  return [
+    `Você é o módulo de aprendizado autônomo e síntese de regras do Elefante.`,
+    `Analise o trabalho recente do agente ${agent.name} (@${agent.handle}) na conversa "${conversationName}" com ${me}.`,
+    ``,
+    `Ferramentas usadas nesta resposta: ${toolsUsed.length ? toolsUsed.join(', ') : '(nenhuma)'}`,
+    `Resposta final do agente:`,
+    lastReply.slice(0, 3000),
+    ``,
+    `Mensagens recentes de contexto:`,
+    ...recentMessages.slice(-6).map((m) => `[${m.author.kind === 'me' ? me : m.author.kind === 'agent' ? agent.name : 'sistema'}] ${m.text.trim().slice(0, 1000)}`),
+    ``,
+    `Memórias já existentes (não repita nem crie duplicatas):`,
+    ...existingMemories.slice(-25).map((m) => `- [${m.category ?? 'geral'}] ${m.text}`),
+    ``,
+    `Extraia APENAS fatos duráveis, padrões técnicos, regras aprendidas, soluções de erros ou preferências que continuarão válidas em conversas futuras.`,
+    `Se nada durável ou relevante foi aprendido (ex.: conversa trivial, tarefa corriqueira sem novidade técnica), retorne a lista vazia.`,
+    ``,
+    `Categorias válidas:`,
+    `- "regra": padrões e convenções de código, testes ou processos.`,
+    `- "projeto": arquitetura, portas, variáveis de ambiente, dependências e setup.`,
+    `- "solucao": como um bug, falha ou erro técnico específico foi resolvido.`,
+    `- "preferencia": preferências e decisões expressadas por ${me}.`,
+    `- "ferramenta": comandos ou comportamento de ferramentas no ambiente.`,
+    ``,
+    `Responda SOMENTE em JSON puro no formato:`,
+    `{"learnings": [{"text": "Frase curta e autossuficiente na 3ª pessoa", "category": "regra", "scope": "agente" | "usuario"}]}`
+  ].join('\n')
+}
+
+export function parseAutoLearn(text: string): { text: string; category: MemoryCategory; scope: 'agente' | 'usuario' }[] {
+  const json = text.slice(text.indexOf('{'), text.lastIndexOf('}') + 1)
+  if (!json) return []
+  try {
+    const data = JSON.parse(json) as { learnings?: unknown }
+    if (!Array.isArray(data.learnings)) return []
+    const validCats = new Set(['regra', 'projeto', 'solucao', 'preferencia', 'ferramenta', 'geral'])
+    const out: { text: string; category: MemoryCategory; scope: 'agente' | 'usuario' }[] = []
+    for (const item of data.learnings) {
+      if (!item || typeof item !== 'object') continue
+      const raw = item as Record<string, unknown>
+      const t = typeof raw['text'] === 'string' ? raw['text'].trim().slice(0, MAX_MEMORY_CHARS) : ''
+      const c = typeof raw['category'] === 'string' && validCats.has(raw['category'].toLowerCase()) ? (raw['category'].toLowerCase() as MemoryCategory) : 'regra'
+      const s = raw['scope'] === 'usuario' ? 'usuario' : 'agente'
+      if (t) out.push({ text: t, category: c, scope: s })
+    }
+    return out
+  } catch {
+    return []
+  }
 }

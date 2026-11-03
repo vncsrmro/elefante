@@ -8,7 +8,7 @@ import { Db } from '../src/core/db'
 import { fakeEngine } from '../src/core/engines/fake'
 import type { Engine, Turn } from '../src/core/engines/types'
 import { Gateway } from '../src/core/gateway'
-import { MAX_AFTER, Memories, memorySystem, parseConsolidation, WINDOW } from '../src/core/memory'
+import { MAX_AFTER, Memories, memorySystem, parseConsolidation, parseAutoLearn, WINDOW } from '../src/core/memory'
 import { Runner } from '../src/core/runs'
 
 const ready = { installed: true, loggedIn: true }
@@ -216,5 +216,49 @@ describe('extraction', () => {
     await runner.send('c1', '@theo oi')
     await settle()
     expect(agentTurns('theo')[0]!.system).not.toContain('PR pequeno')
+  })
+
+  it('saves and filters memories by category', () => {
+    memory.add('a1', 'Usar sempre Vitest para testes unitários', 'regra')
+    memory.add('a1', 'Porta 8080 reservada para o servidor backend', 'projeto')
+    memory.add('a1', 'Processo travado na porta 3000 resolver com kill', 'solucao')
+
+    const regras = db.memories({ category: 'regra' })
+    expect(regras).toHaveLength(1)
+    expect(regras[0]!.text).toBe('Usar sempre Vitest para testes unitários')
+
+    const projetos = db.memories({ category: 'projeto' })
+    expect(projetos).toHaveLength(1)
+    expect(projetos[0]!.text).toBe('Porta 8080 reservada para o servidor backend')
+
+    const solucoes = db.memories({ category: 'solucao' })
+    expect(solucoes).toHaveLength(1)
+    expect(solucoes[0]!.text).toBe('Processo travado na porta 3000 resolver com kill')
+  })
+
+  it('an agent can remember with a category', () => {
+    const r = memory.remember(db.agent('a1')!, db.conversation('c1')!, {
+      texto: 'Sempre rodar build com --legacy-peer-deps',
+      sobre: 'agente',
+      categoria: 'regra'
+    })
+    expect(r.memory).toBeDefined()
+    expect(r.memory?.category).toBe('regra')
+    expect(r.memory?.scope).toBe('a1')
+  })
+
+  it('parses autonomous learning JSON with categories', () => {
+    const raw = JSON.stringify({
+      learnings: [
+        { text: 'Sempre tipar retornos de funções em TypeScript', category: 'regra', scope: 'agente' },
+        { text: 'Backend roda em Docker na porta 5432', category: 'projeto', scope: 'agente' },
+        { text: 'Usuário prefere mensagens diretas sem cumprimentos', category: 'preferencia', scope: 'usuario' }
+      ]
+    })
+    const parsed = parseAutoLearn(raw)
+    expect(parsed).toHaveLength(3)
+    expect(parsed[0]).toEqual({ text: 'Sempre tipar retornos de funções em TypeScript', category: 'regra', scope: 'agente' })
+    expect(parsed[1]).toEqual({ text: 'Backend roda em Docker na porta 5432', category: 'projeto', scope: 'agente' })
+    expect(parsed[2]).toEqual({ text: 'Usuário prefere mensagens diretas sem cumprimentos', category: 'preferencia', scope: 'usuario' })
   })
 })

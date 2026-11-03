@@ -935,8 +935,8 @@ const api: Api = {
   updateTool: ({ connectorId, name, patch }) => connectors.updateTool(connectorId, name, patch),
   decideApproval: ({ id, decision, reason, always }) => void runner.decide(id, decision, reason?.trim() || undefined, always),
 
-  addMemory: ({ scope, text }) => memory.add(scope, text),
-  editMemory: ({ id, text }) => memory.edit(id, text),
+  addMemory: ({ scope, text, category }) => memory.add(scope, text, category),
+  editMemory: ({ id, text, category }) => memory.edit(id, text, category),
   confirmMemory: ({ id }) => memory.confirm(id),
   decideMemory: ({ id, accept }) => memory.decide(id, accept),
   forgetMemory: ({ id, reason }) => memory.forget(id, reason?.trim() || undefined),
