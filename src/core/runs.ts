@@ -25,7 +25,8 @@ const MAX_CONCURRENT = 4
 const MAX_TURN_IMAGES = 6 // attached images a reply sees as images; older ones only by name
 const mimeOf = (name: string): string => ({ png: 'image/png', gif: 'image/gif', webp: 'image/webp' })[name.split('.').pop()!.toLowerCase()] ?? 'image/jpeg'
 const MAX_MENTIONS = 3
-const MAX_DEPTH = 3 // agent replies chained from one human message
+const MAX_DEPTH = 3 // agent replies chained from one human message without tool work
+const MAX_WORK_DEPTH = 50 // agent replies chained when doing active tool work
 const DELTA_FLUSH_MS = 40
 const RETRYABLE: RunStatus[] = ['failed', 'stopped', 'interrupted', 'limit_reached']
 const MAX_RESULT_CHARS = 60_000 // per tool result handed back to the model
@@ -119,6 +120,8 @@ export interface RoutineEvent {
 }
 
 type Control = { ctl: AbortController; reason?: 'stopped' | 'limit' | 'budget' | 'loop' | 'errors' | 'stall' }
+
+const NON_TOOL_LABELS = new Set(['Pensou', 'Thought', 'Pausou', 'Paused', 'Respondeu', 'Replied', 'Parado', 'Stopped', 'Parou', 'Falhou', 'Failed'])
 
 export class Runner {
   private queue: (() => Promise<unknown>)[] = []
@@ -1065,7 +1068,13 @@ export class Runner {
         try {
           const r = await runTool(name, args)
           const { [REASON_PARAM]: _why, ...callArgs } = args
-          const n = repeated(`${name} ${canonical(callArgs)}`, resultText(r))
+          const isPolling = name === 'navegador_esperar'
+          if (isPolling) {
+            seen.delete('navegador_ler {}')
+            seen.delete('navegador_ver {}')
+            seen.delete('navegador_ver {"mostrar":false}')
+          }
+          const n = isPolling ? 0 : repeated(`${name} ${canonical(callArgs)}`, resultText(r))
           failing = r.isError ? failing + 1 : 0
           if (n >= REPEAT_STOP) halt('loop')
           else if (failing >= ERRORS_STOP) halt('errors')
@@ -1478,17 +1487,20 @@ export class Runner {
   }
 
   // An agent that mentions another agent of the conversation hands it the turn,
-  // up to MAX_DEPTH replies in a row without a human message in between.
+  // up to MAX_WORK_DEPTH replies when tools are used (or MAX_DEPTH for pure text ping-pong).
   // Whether the conversation goes on with another agent.
   private chain(agent: Agent, conv: Conversation, msg: Message, depth: number): boolean {
     if (this.paused) return false
     const next = mentioned(msg.text, this.members(conv).filter((a) => a.id !== agent.id)).slice(0, MAX_MENTIONS)
     if (next.length === 0) return false
-    if (depth >= MAX_DEPTH) {
-      this.post(conv.id, L(`Parei a conversa entre agentes aqui: foram ${MAX_DEPTH} respostas seguidas. Mande uma mensagem pra continuar.`, `I stopped the conversation between agents here: ${MAX_DEPTH} replies in a row. Send a message to go on.`))
+    const hasWork = (msg.run?.steps?.some((s) => s.status === 'done' && !NON_TOOL_LABELS.has(s.label)) ?? false) || (msg.run?.artifactIds?.length ?? 0) > 0 || !!msg.run?.browser
+    const max = hasWork ? MAX_WORK_DEPTH : MAX_DEPTH
+    if (depth >= max) {
+      this.post(conv.id, L(`Parei a conversa entre agentes aqui: foram ${depth} respostas seguidas sem intervenção. Mande uma mensagem pra continuar se desejar.`, `I stopped the conversation between agents here: ${depth} replies in a row without intervention. Send a message to go on if desired.`))
       return false
     }
-    for (const a of next) this.enqueue(() => this.execute(a, conv, { depth: depth + 1, work: msg.run?.work }))
+    const nextDepth = hasWork ? 1 : depth + 1
+    for (const a of next) this.enqueue(() => this.execute(a, conv, { depth: nextDepth, work: msg.run?.work }))
     return true
   }
 }

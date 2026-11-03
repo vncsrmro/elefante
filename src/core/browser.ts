@@ -94,8 +94,20 @@ export const browserTools = (): ToolDef[] => {
     },
     {
       name: 'navegador_esperar',
-      description: L('Espera de 1 a 20 segundos por uma página que ainda está carregando e devolve a tela de novo.', 'Waits 1 to 20 seconds for a page that is still loading and returns the screen again.'),
-      inputSchema: { type: 'object', properties: { segundos: { type: 'number' } }, required: ['segundos'] }
+      description: L(
+        'Espera de 1 a 120 segundos por uma página que ainda está carregando ou por um processamento em andamento (render de vídeo no Google Flow/Veo, geração de IA, download, processamento em lote) e devolve a tela de novo.',
+        'Waits 1 to 120 seconds for a page that is still loading or for an in-progress generation (video render in Google Flow/Veo, AI generation, download, batch processing) and returns the screen again.'
+      ),
+      inputSchema: {
+        type: 'object',
+        properties: {
+          segundos: {
+            type: 'number',
+            description: L('Tempo em segundos para esperar (de 1 a 120). Para gerações de vídeo, use de 15 a 30 segundos por iteração.', 'Time in seconds to wait (1 to 120). For video generations, use 15 to 30 seconds per iteration.')
+          }
+        },
+        required: ['segundos']
+      }
     }
   ]
 }
@@ -274,11 +286,12 @@ export class Browser {
     this.liveUntil.set(agentId, Date.now() + ms)
   }
 
-  // A frame of the screen, streamed by Chrome while the page changes. Only while
-  // it works or I drive: says Chrome may send the next one right away.
+  // A frame of the screen, streamed by Chrome while the page changes.
+  // Active streaming at full speed while working or user driving; smooth updates at idle pace otherwise.
   frame(agentId: string, jpeg: string): boolean {
     const view = this.views.get(agentId)
-    if (!view?.url || !(view.shown || view.doing || (this.liveUntil.get(agentId) ?? 0) > Date.now())) return false
+    if (!view?.url) return false
+    const isActive = !!(view.shown || view.doing || (this.liveUntil.get(agentId) ?? 0) > Date.now())
     const f = this.frames.get(agentId) ?? {}
     this.frames.set(agentId, f)
     f.next = jpeg
@@ -287,8 +300,8 @@ export class Browser {
         f.timer = undefined
         if (f.next && this.views.get(agentId)?.url) this.update(agentId, { frame: `data:image/jpeg;base64,${f.next}` })
         f.next = undefined
-      }, 100)
-    return true
+      }, isActive ? 100 : 1000)
+    return isActive
   }
 
   // From the main process: I opened the window ("Assumir") or closed it.
@@ -433,7 +446,7 @@ export class Browser {
         case 'navegador_voltar':
           return { result: await this.after(id, await this.deps.host(id, 'back'), step) }
         case 'navegador_esperar': {
-          const s = Math.min(20, Math.max(1, Number(args['segundos']) || 3))
+          const s = Math.min(120, Math.max(1, Number(args['segundos']) || 5))
           await new Promise((r) => setTimeout(r, s * 1000))
           return { result: await this.after(id, await this.deps.host(id, 'frame'), step) }
         }

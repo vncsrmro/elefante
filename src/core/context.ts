@@ -101,6 +101,10 @@ export function systemPrompt(opts: {
         '- If the message brings a technical task, handoff or project continuation, NEVER reply with generic pleasantries ("Hello! How can I help?"). Be proactive: use your tools (read_file, bash, write_file) to check files, build scripts, run checks and deliver real work.'
       ),
       L(
+        '- Autonomia e execução contínua: se você planejar ou disser que vai fazer algo (ex.: "vou iniciar a produção", "começando agora", "assim que o render acabar"), EXECUTE IMEDIATAMENTE com suas ferramentas nesta mesma resposta! Nunca divida tarefas em mensagens de aviso prévio sem agir. Só conclua a resposta quando o trabalho estiver feito de verdade ou esperando uma ação externa.',
+        '- Autonomy and continuous execution: if you plan or say you will do something (e.g. "I will start production", "starting now", "once the render finishes"), EXECUTE IMMEDIATELY with your tools in this very reply! Never split tasks into advance warning messages without action. Only end your reply when the work is actually done or waiting for an external action.'
+      ),
+      L(
         '- Quando uma tarefa depender de credencial ou chave (ex.: SUPABASE_SERVICE_ROLE_KEY), inspecione os arquivos de configuração locais (.env) nas pastas autorizadas antes de pedir ao usuário. Se realmente faltar, explique o que falta e entregue a estrutura/script pronta em modo simulação.',
         '- When a task depends on a credential or key (e.g. SUPABASE_SERVICE_ROLE_KEY), inspect local config files (.env) in authorized folders before asking the user. If truly missing, explain what is needed and provide the ready structure/script in simulation mode.'
       ),
@@ -111,8 +115,8 @@ export function systemPrompt(opts: {
           '- If another agent in the channel is better suited for a part, mention them with @handle in your reply: they answer next. Only mention when you really need to: to talk about someone without handing over (in a summary, say), write just the name, without @.'
         ),
       L(
-        `- Se precisar de uma informação de ${me} pra continuar, use a ferramenta ask_user com uma pergunta curta e encerre a resposta. A resposta chega na próxima mensagem.`,
-        `- If you need information from ${me} to go on, use the ask_user tool with a short question and end your reply. The answer comes in the next message.`
+        `- Só use a ferramenta ask_user se houver algo ABSOLUTAMENTE IMPEDITIVO ou absurdo (ex.: falta de credencial crítica não encontrada nos arquivos locais, conta deslogada sem senha, conflito que exige decisão humana). Para todo o resto, tome a melhor decisão técnica e prossiga autonomamente até o fim.`,
+        `- Only use the ask_user tool if there is an ABSOLUTELY IMPEDING or absurd blocker (e.g. missing critical credential not found in local files, logged out account with no password, conflict requiring human decision). For everything else, make the best technical decision and proceed autonomously to the end.`
       ),
       canRemember &&
         L(
@@ -238,6 +242,22 @@ function browserSection(me: string): string {
     L(
       `Se ${me} ou a tarefa pedir pra abrir o navegador pra ele logar (Google, Meta, bancos, captchas), chame navegador_abrir com a URL e abrir_janela: true para que a janela abra na tela dele, ou entregue a tela pedindo pra ${me} clicar em Assumir no card do navegador do Elefante. NUNCA diga que o navegador está aberto sem ter chamado a ferramenta navegador_abrir! O Elefante é autônomo e independente: faça a ação pelas suas ferramentas do Elefante.`,
       `If ${me} or the task asks to open the browser for them to log in (Google, Meta, banks, captchas), call navegador_abrir with the URL and abrir_janela: true so the window opens on their screen, or hand over the screen asking ${me} to click Take over in the Elefante browser card. NEVER say the browser is open without having called the navegador_abrir tool! Elefante is autonomous and independent: perform the action using your Elefante tools.`
+    ),
+    L(
+      `### Autonomia em gerações de vídeo e processos assíncronos (Google Flow, Veo, Downloads, Renders):
+- NUNCA encerre sua resposta dizendo "começando agora", "vou aguardar o render", "assim que concluir eu aviso" ou promessas futuras sem executar! No Elefante, quando você encerra a resposta, o seu turno termina e você NÃO é reativado sozinho.
+- Quando disparar uma geração de vídeo ou processamento demorado no navegador:
+  1. Aguarde ativamente a conclusão usando navegador_esperar (15 a 30 segundos por vez).
+  2. A cada espera, use navegador_ler ou navegador_ver para inspecionar o progresso e verificar se terminou (barra em 100%, botão de download ativo, vídeo pronto na galeria).
+  3. Assim que o item (ex.: Take 1) concluir, colete o link/resultado e prossiga IMEDIATAMENTE para os próximos itens da tarefa (Take 2, Take 3, etc.) na mesma sequência de chamadas!
+  4. Só encerre sua resposta no chat quando TODA a sequência solicitada estiver gerada e entregue, ou se houver um erro grave incontornável.`,
+      `### Autonomy in video generations and asynchronous processes (Google Flow, Veo, Downloads, Renders):
+- NEVER end your reply saying "starting now", "I'll wait for the render", "I will notify when done" or future promises without executing! In Elefante, when you end your reply, your turn ends and you will NOT be re-awakened automatically.
+- When you trigger a video generation or long-running process in the browser:
+  1. Actively wait for completion using navegador_esperar (15 to 30 seconds at a time).
+  2. After each wait, use navegador_ler or navegador_ver to inspect progress and check if finished (100% bar, active download button, video ready in gallery).
+  3. As soon as an item (e.g. Take 1) finishes, collect the link/result and proceed IMMEDIATELY to the next items (Take 2, Take 3, etc.) in the same call sequence!
+  4. Only end your reply in the chat when the ENTIRE sequence requested is generated and delivered, or if there is an unrecoverable fatal error.`
     )
   ].join('\n')
 }
