@@ -1,6 +1,6 @@
 #!/bin/sh
 # Installs or updates Elefante:
-#   curl -fsSL https://github.com/viniciusromeiro/elefante/releases/latest/download/install.sh | sh
+#   curl -fsSL https://raw.githubusercontent.com/vncsrmro/elefante/main/install.sh | bash
 #
 # On a Mac: the app (signed and notarized by Apple) goes into Applications; the
 # "from the internet" mark is cleared all the same. Before its public release
@@ -15,7 +15,7 @@
 # ELEFANTE_ZIP (Mac), ELEFANTE_DEB or ELEFANTE_APPIMAGE (Linux; a URL or a local file)
 # and ELEFANTE_DEST, another folder. ELEFANTE_APPIMAGE=1 picks the AppImage over the .deb.
 set -e
-REPO=viniciusromeiro/elefante
+REPO=vncsrmro/elefante
 LATEST="https://github.com/$REPO/releases/latest/download"
 
 # Messages in Portuguese on a system set to Portuguese, in English otherwise.

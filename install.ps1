@@ -1,5 +1,5 @@
 # Installs or updates Elefante on Windows, in PowerShell:
-#   irm https://github.com/viniciusromeiro/elefante/releases/latest/download/install.ps1 | iex
+#   irm https://raw.githubusercontent.com/vncsrmro/elefante/main/install.ps1 | iex
 #
 # It downloads the installer of the latest release and runs it without its window: Elefante
 # goes into your user's programs (%LOCALAPPDATA%\Programs), with no admin rights, and opens.
@@ -15,7 +15,7 @@
 & {
   $ErrorActionPreference = 'Stop'
   $ProgressPreference = 'SilentlyContinue' # Windows PowerShell downloads slowly with a progress bar
-  $Latest = 'https://github.com/viniciusromeiro/elefante/releases/latest/download'
+  $Latest = 'https://github.com/vncsrmro/elefante/releases/latest/download'
 
   # Messages in Portuguese on a system set to Portuguese, in English otherwise. This file
   # stays ASCII, since Windows PowerShell reads a download with no charset as Latin-1:
