@@ -95,16 +95,19 @@ describe('a terminal for the person', () => {
 
 describe("the agents' Chrome", () => {
   it('looks where Chrome lives on each system, Google Chrome first', () => {
-    expect(chromeCandidates('mac')).toEqual(['/Applications/Google Chrome.app/Contents/MacOS/Google Chrome'])
+    expect(chromeCandidates('mac')[0]).toBe('/Applications/Google Chrome.app/Contents/MacOS/Google Chrome')
+    expect(chromeCandidates('mac')).toContain('/Applications/Brave Browser.app/Contents/MacOS/Brave Browser')
     expect(chromeCandidates('linux')[0]).toBe('/usr/bin/google-chrome-stable')
+    expect(chromeCandidates('linux')).toContain('/usr/bin/brave-browser')
     expect(chromeCandidates('linux')).toContain('/usr/bin/chromium')
     expect(findChrome('linux', (p) => p === '/usr/bin/chromium')).toBe('/usr/bin/chromium')
+    expect(findChrome('linux', (p) => p === '/usr/bin/brave-browser')).toBe('/usr/bin/brave-browser')
     expect(findChrome('linux', () => false)).toBeUndefined()
-    // Installed per machine or per user.
-    expect(chromeCandidates('windows', { ProgramFiles: 'C:\\Program Files', LOCALAPPDATA: 'C:\\Users\\edu\\AppData\\Local' })).toEqual([
-      join('C:\\Program Files', 'Google', 'Chrome', 'Application', 'chrome.exe'),
-      join('C:\\Users\\edu\\AppData\\Local', 'Google', 'Chrome', 'Application', 'chrome.exe')
-    ])
+    // Installed per machine or per user (Chrome, Brave, Edge, Chromium).
+    const winCandidates = chromeCandidates('windows', { ProgramFiles: 'C:\\Program Files', LOCALAPPDATA: 'C:\\Users\\edu\\AppData\\Local' })
+    expect(winCandidates[0]).toBe(join('C:\\Program Files', 'Google', 'Chrome', 'Application', 'chrome.exe'))
+    expect(winCandidates).toContain(join('C:\\Program Files', 'BraveSoftware', 'Brave-Browser', 'Application', 'brave.exe'))
+    expect(findChrome('windows', (p) => p === join('C:\\Program Files', 'BraveSoftware', 'Brave-Browser', 'Application', 'brave.exe'))).toBe(join('C:\\Program Files', 'BraveSoftware', 'Brave-Browser', 'Application', 'brave.exe'))
   })
 
   it("tells sites the real system, so it matches the browser's own user agent", () => {

@@ -77,14 +77,48 @@ export function terminalCommand(command: string, os: Os, has: (bin: string) => b
   return undefined
 }
 
-// Google Chrome first: Google refuses its logins in the app's own browser. Chromium
-// from a snap is left out, since a snap can't write the profile in the app's
-// (hidden) data folder. On Windows, Chrome installs per machine or per user.
+// Google Chrome first, then other Chromium browsers (Brave, Edge, Chromium):
+// Google refuses its logins in the app's own browser. Chromium from a snap is left out,
+// since a snap can't write the profile in the app's (hidden) data folder.
+// On Windows, browsers install per machine or per user.
 export function chromeCandidates(os: Os = osOf(), env: NodeJS.ProcessEnv = process.env): string[] {
-  if (os === 'mac') return ['/Applications/Google Chrome.app/Contents/MacOS/Google Chrome']
-  if (os === 'linux') return ['/usr/bin/google-chrome-stable', '/usr/bin/google-chrome', '/opt/google/chrome/chrome', '/usr/bin/chromium']
-  const tail = join('Google', 'Chrome', 'Application', 'chrome.exe')
-  return [env['ProgramFiles'], env['ProgramFiles(x86)'], env['LOCALAPPDATA']].filter((r): r is string => !!r).map((r) => join(r, tail))
+  const explicit = env['ELEFANTE_CHROME_BIN'] || env['CHROME_BIN'] || env['BROWSER_BIN']
+  if (explicit) return [explicit]
+
+  if (os === 'mac') {
+    return [
+      '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome',
+      '/Applications/Brave Browser.app/Contents/MacOS/Brave Browser',
+      '/Applications/Microsoft Edge.app/Contents/MacOS/Microsoft Edge',
+      '/Applications/Chromium.app/Contents/MacOS/Chromium'
+    ]
+  }
+  if (os === 'linux') {
+    return [
+      '/usr/bin/google-chrome-stable',
+      '/usr/bin/google-chrome',
+      '/opt/google/chrome/chrome',
+      '/usr/bin/brave-browser',
+      '/usr/bin/brave',
+      '/usr/bin/microsoft-edge-stable',
+      '/usr/bin/microsoft-edge',
+      '/usr/bin/chromium'
+    ]
+  }
+  const roots = [env['ProgramFiles'], env['ProgramFiles(x86)'], env['LOCALAPPDATA']].filter((r): r is string => !!r)
+  const browserTails = [
+    join('Google', 'Chrome', 'Application', 'chrome.exe'),
+    join('BraveSoftware', 'Brave-Browser', 'Application', 'brave.exe'),
+    join('Microsoft', 'Edge', 'Application', 'msedge.exe'),
+    join('Chromium', 'Application', 'chrome.exe')
+  ]
+  const list: string[] = []
+  for (const tail of browserTails) {
+    for (const r of roots) {
+      list.push(join(r, tail))
+    }
+  }
+  return list
 }
 
 export const findChrome = (os: Os = osOf(), exists: (p: string) => boolean = existsSync): string | undefined => chromeCandidates(os).find(exists)
