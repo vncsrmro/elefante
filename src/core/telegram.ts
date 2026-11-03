@@ -541,8 +541,9 @@ export class Telegram {
 
     const where = convName ? `(#${convName})` : ''
     const header = `🤖 *${agentName}* ${where}:\n\n`
+    const totalTokens = (msg.run?.receipt?.inputTokens ?? 0) + (msg.run?.receipt?.outputTokens ?? 0)
     const receiptInfo = msg.run?.receipt
-      ? `\n\n⏱️ ${Math.round((msg.run.receipt.ms || 0) / 1000)}s · ${msg.run.receipt.tokens} tokens`
+      ? `\n\n⏱️ ${Math.round((msg.run.receipt.ms || 0) / 1000)}s · ${totalTokens} tokens`
       : ''
     const full = `${header}${msg.text}${receiptInfo}`
     await this.sendChunked(full)

@@ -229,12 +229,12 @@ export function StatusBar(): ReactNode {
                       <strong>{L('Hosts & Ambientes', 'Hosts & Environments')}</strong>
                     </div>
                     <button
-                      className="icon-btn icon-btn--xs"
+                      className={`icon-btn icon-btn--xs ${refreshingHosts ? 'spin' : ''}`}
                       onClick={() => void refreshHosts()}
                       title={L('Atualizar lista de hosts', 'Refresh hosts')}
                       disabled={refreshingHosts}
                     >
-                      <Icon name="refresh" size={11} className={refreshingHosts ? 'spin' : ''} />
+                      <Icon name="refresh" size={11} />
                     </button>
                   </div>
 

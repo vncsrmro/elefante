@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
-import type { Approval, Message } from '../src/shared/types'
+import type { Agent, Approval, Message } from '../src/shared/types'
 import { Telegram } from '../src/core/telegram'
 
 // A stand-in for Telegram's Bot API: updates are queued by the test; what the bot sends is recorded.
@@ -154,7 +154,7 @@ describe('Telegram', () => {
       changed: () => {},
       fetch: api.f,
       conversations: () => convs,
-      agents: () => [{ id: 'a1', name: 'Rodrigo', role: 'Tech Lead', color: 'blue', instructions: '', computer: false, web: true, browser: false, memoryMode: 'auto', autoApprove: [], folders: [], apps: [], createdAt: 0 }],
+      agents: () => [{ id: 'a1', name: 'Rodrigo', role: 'Tech Lead' } as unknown as Agent],
       createConversation: (name) => {
         const id = `c-${++convCount}`
         convs.push({ id, kind: 'channel', name, members: ['a1'] })
