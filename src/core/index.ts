@@ -208,6 +208,20 @@ function toPhone(e: CoreEvent): void {
     sentToPhone.add(e.message.id)
     const conv = db.conversation(e.message.conversationId)
     void telegram.questionAsked(e.message, name(e.message.author.id), conv?.kind === 'channel' ? `#${conv.name}` : L('na DM', 'in the DM'))
+  } else if (e.type === 'message' && e.message.author.kind === 'agent') {
+    const run = e.message.run
+    const conv = db.conversation(e.message.conversationId)
+    const agentName = name(e.message.author.id)
+
+    if (run?.status === 'working') {
+      void telegram.agentWorking(e.message.conversationId)
+    } else if (run?.status === 'failed' && !sentToPhone.has(e.message.id)) {
+      sentToPhone.add(e.message.id)
+      void telegram.agentFailed(e.message, agentName, conv?.name, run.error)
+    } else if ((run?.status === 'done' || (!run && !!e.message.text.trim())) && !sentToPhone.has(e.message.id) && e.message.text.trim()) {
+      sentToPhone.add(e.message.id)
+      void telegram.agentReplied(e.message, agentName, conv?.name)
+    }
   }
 }
 
@@ -447,7 +461,26 @@ telegram = new Telegram({
   decide: (id, decision, reason) => runner.decide(id, decision, reason),
   approval: (id) => db.approval(id),
   answer: (conversationId, text) => void runner.send(conversationId, text),
-  changed: () => emit({ type: 'settings', settings: settings() })
+  changed: () => emit({ type: 'settings', settings: settings() }),
+  conversations: () => db.conversations(),
+  agents: () => db.agents().filter((a) => !a.archived && a.kind !== 'tuca'),
+  createConversation: (name, agentIds) => {
+    const clean = channelName(name) || `telegram-${Date.now().toString(36).slice(-4)}`
+    let finalName = clean
+    let n = 2
+    while (db.conversations().some((c) => c.kind === 'channel' && c.name.toLowerCase() === finalName.toLowerCase())) {
+      finalName = `${clean}-${n++}`
+    }
+    const id = randomUUID()
+    const members = agentIds && agentIds.length > 0 ? agentIds : db.agents().filter((a) => !a.archived && a.kind !== 'tuca').map((a) => a.id)
+    db.createConversation({ id, kind: 'channel', name: finalName, members })
+    emitConversations([id])
+    return id
+  },
+  activeConversationId: () => {
+    const convs = db.conversations()
+    return convs.find((c) => c.kind === 'channel')?.id
+  }
 })
 
 // Routines started by something on this Mac: POST http://127.0.0.1:WEBHOOK_PORT/gatilho/<token>.

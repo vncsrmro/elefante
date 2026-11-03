@@ -128,4 +128,73 @@ describe('Telegram', () => {
     await settle()
     expect(answered).toEqual([['c1', 'Sexta que vem']])
   })
+
+  it('splits long messages without truncating text, preserving code blocks', async () => {
+    await pair()
+    const longCode = '```typescript\n' + 'const x = 1;\n'.repeat(500) + '```'
+    expect(longCode.length).toBeGreaterThan(4000)
+    await tg.sendChunked(longCode)
+    expect(api.sent.length).toBeGreaterThan(1)
+    // Verify each chunk is under max length
+    for (const msg of api.sent) {
+      expect(String(msg.body['text']).length).toBeLessThanOrEqual(4000)
+    }
+  })
+
+  it('Hermes Agent style: freeform messages route to active conversation and replies deliver to Telegram', async () => {
+    let convCount = 0
+    const convs = [{ id: 'c-geral', kind: 'channel' as const, name: 'geral', members: ['a1'] }]
+    const customTg = new Telegram({
+      secrets: { get: async (k) => store.get(k), set: async (k, v) => void (v === undefined ? store.delete(k) : store.set(k, v)) },
+      decide: async (id, d, reason) => {
+        decided.push([id, d, reason])
+      },
+      approval: (id) => approvals.get(id),
+      answer: (conv, text) => answered.push([conv, text]),
+      changed: () => {},
+      fetch: api.f,
+      conversations: () => convs,
+      agents: () => [{ id: 'a1', name: 'Rodrigo', role: 'Tech Lead', color: 'blue', instructions: '', computer: false, web: true, browser: false, memoryMode: 'auto', autoApprove: [], folders: [], apps: [], createdAt: 0 }],
+      createConversation: (name) => {
+        const id = `c-${++convCount}`
+        convs.push({ id, kind: 'channel', name, members: ['a1'] })
+        return id
+      },
+      activeConversationId: () => convs[0]!.id
+    })
+    await customTg.setToken('TOKEN')
+    api.push({ message: { message_id: 1, chat: me, text: `/start ${customTg.info().code}` } })
+    await settle()
+
+    // 1. Send freeform user prompt
+    api.push({ message: { message_id: 10, chat: me, text: 'Preciso refatorar o backend' } })
+    await settle()
+    expect(answered).toEqual([['c-geral', 'Preciso refatorar o backend']])
+
+    // 2. Agent responds in that conversation -> arrives on Telegram
+    const replyMsg: Message = {
+      id: 'm-reply',
+      conversationId: 'c-geral',
+      author: { kind: 'agent', id: 'a1' },
+      text: 'Com certeza! Analisei o código e sugiro começar pelos controladores.',
+      at: Date.now(),
+      run: { status: 'done', steps: [] }
+    }
+    await customTg.agentReplied(replyMsg, 'Rodrigo', 'geral')
+    const lastSent = api.sent.at(-1)!
+    expect(lastSent.body['text']).toContain('Rodrigo')
+    expect(lastSent.body['text']).toContain('sugiro começar pelos controladores')
+
+    // 3. Create new conversation via /new
+    api.push({ message: { message_id: 11, chat: me, text: '/new paperx-api' } })
+    await settle()
+    expect(api.sent.at(-1)!.body['text']).toContain('Novo chat criado')
+
+    // 4. Next freeform prompt automatically goes to the newly created conversation
+    api.push({ message: { message_id: 12, chat: me, text: 'Configurar rotas' } })
+    await settle()
+    expect(answered.at(-1)).toEqual(['c-1', 'Configurar rotas'])
+
+    customTg.stop()
+  })
 })
