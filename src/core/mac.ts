@@ -78,6 +78,11 @@ export const macTools = (): ToolDef[] => {
 export function macPath(p: string, cwd: string): string {
   const s = p.trim()
   if (s === '~' || s.startsWith('~/') || (isWin && s.startsWith('~\\'))) return normalize(join(homedir(), s.slice(1)))
+  // On Windows, agents using Git Bash or POSIX paths (e.g. /e/romeiro.dev/... or /c/Users/...) must map to E:\... or C:\...
+  if (isWin && /^\/([a-zA-Z])(\/.*)?$/.test(s)) {
+    const winPath = s.replace(/^\/([a-zA-Z])(\/.*)?$/, (_, drive, rest) => `${drive.toUpperCase()}:${rest ? rest.replace(/\//g, '\\') : '\\'}`)
+    return normalize(winPath)
+  }
   return normalize(isAbsolute(s) ? s : join(cwd, s))
 }
 

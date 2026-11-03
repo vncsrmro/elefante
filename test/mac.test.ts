@@ -55,6 +55,10 @@ describe('paths on the Mac', () => {
     expect(macPath('~/x/y.txt', w)).toBe(join(homedir(), 'x/y.txt'))
     expect(macPath(hosts, w)).toBe(hosts)
     expect(macPath('a/../b.txt', w)).toBe(join(w, 'b.txt'))
+    if (win) {
+      expect(macPath('/e/romeiro.dev/PaperX/file.png', w)).toBe('E:\\romeiro.dev\\PaperX\\file.png')
+      expect(macPath('/c/Users/vncs/doc.txt', w)).toBe('C:\\Users\\vncs\\doc.txt')
+    }
   })
 })
 
