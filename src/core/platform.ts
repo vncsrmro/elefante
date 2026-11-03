@@ -82,19 +82,17 @@ export function terminalCommand(command: string, os: Os, has: (bin: string) => b
 // since a snap can't write the profile in the app's (hidden) data folder.
 // On Windows, browsers install per machine or per user.
 export function chromeCandidates(os: Os = osOf(), env: NodeJS.ProcessEnv = process.env): string[] {
-  const explicit = env['ELEFANTE_CHROME_BIN'] || env['CHROME_BIN'] || env['BROWSER_BIN']
-  if (explicit) return [explicit]
+  let list: string[] = []
 
   if (os === 'mac') {
-    return [
+    list = [
       '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome',
       '/Applications/Brave Browser.app/Contents/MacOS/Brave Browser',
       '/Applications/Microsoft Edge.app/Contents/MacOS/Microsoft Edge',
       '/Applications/Chromium.app/Contents/MacOS/Chromium'
     ]
-  }
-  if (os === 'linux') {
-    return [
+  } else if (os === 'linux') {
+    list = [
       '/usr/bin/google-chrome-stable',
       '/usr/bin/google-chrome',
       '/opt/google/chrome/chrome',
@@ -104,20 +102,26 @@ export function chromeCandidates(os: Os = osOf(), env: NodeJS.ProcessEnv = proce
       '/usr/bin/microsoft-edge',
       '/usr/bin/chromium'
     ]
-  }
-  const roots = [env['ProgramFiles'], env['ProgramFiles(x86)'], env['LOCALAPPDATA']].filter((r): r is string => !!r)
-  const browserTails = [
-    join('Google', 'Chrome', 'Application', 'chrome.exe'),
-    join('BraveSoftware', 'Brave-Browser', 'Application', 'brave.exe'),
-    join('Microsoft', 'Edge', 'Application', 'msedge.exe'),
-    join('Chromium', 'Application', 'chrome.exe')
-  ]
-  const list: string[] = []
-  for (const tail of browserTails) {
-    for (const r of roots) {
-      list.push(join(r, tail))
+  } else {
+    const roots = [env['ProgramFiles'], env['ProgramFiles(x86)'], env['LOCALAPPDATA']].filter((r): r is string => !!r)
+    const browserTails = [
+      join('Google', 'Chrome', 'Application', 'chrome.exe'),
+      join('BraveSoftware', 'Brave-Browser', 'Application', 'brave.exe'),
+      join('Microsoft', 'Edge', 'Application', 'msedge.exe'),
+      join('Chromium', 'Application', 'chrome.exe')
+    ]
+    for (const tail of browserTails) {
+      for (const r of roots) {
+        list.push(join(r, tail))
+      }
     }
   }
+
+  const explicit = env['ELEFANTE_CHROME_BIN']
+  if (explicit && os === osOf() && !list.includes(explicit)) {
+    list.unshift(explicit)
+  }
+
   return list
 }
 
