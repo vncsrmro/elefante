@@ -2,7 +2,7 @@ import { app, BrowserWindow, dialog, ipcMain, Menu, MessageChannelMain, nativeIm
 import { execFile } from 'node:child_process'
 import { existsSync, mkdirSync, rmSync, writeFileSync } from 'node:fs'
 import { dirname, join, normalize, sep } from 'node:path'
-import { pathToFileURL } from 'node:url'
+import { fileURLToPath, pathToFileURL } from 'node:url'
 import { L, langOf, setLang, type Lang } from '../shared/lang'
 import type { BrowserOp } from '../shared/types'
 import { Browsers } from './browser'
@@ -378,20 +378,32 @@ function createWindow(): BrowserWindow {
     }
   })
 
-  // Links in messages open in the default browser, never inside the app.
+  // Links in messages open in the default browser or in the lateral code editor, never navigating the app away.
   win.webContents.setWindowOpenHandler(({ url }) => {
-    void shell.openExternal(url)
+    if (/^https?:\/\//i.test(url)) {
+      void shell.openExternal(url)
+    } else if (url.startsWith('file://')) {
+      try {
+        const filePath = fileURLToPath(url)
+        win.webContents.send('open-file-in-editor', filePath)
+      } catch {}
+    }
     return { action: 'deny' }
   })
 
-  // react-markdown renders message links as plain <a href>, and a plain click
-  // navigates this whole window away (the app "disappears" behind the site).
-  // Same promise as above, for those: web links go to the real browser;
-  // a same-URL navigation (reload) is not a link and stays.
+  // Block any in-window navigation away from the app. Web links go to the real browser,
+  // file links open in the lateral editor.
   win.webContents.on('will-navigate', (event, url) => {
-    if (!/^https?:\/\//.test(url) || url === win.webContents.getURL()) return
+    if (url === win.webContents.getURL()) return
     event.preventDefault()
-    void shell.openExternal(url)
+    if (/^https?:\/\//i.test(url)) {
+      void shell.openExternal(url)
+    } else if (url.startsWith('file://')) {
+      try {
+        const filePath = fileURLToPath(url)
+        win.webContents.send('open-file-in-editor', filePath)
+      } catch {}
+    }
   })
 
   if (process.env['ELECTRON_RENDERER_URL']) {

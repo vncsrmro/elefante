@@ -12,6 +12,7 @@ import {
   MODELS,
   addConnector,
   authorizeConnector,
+  createFromDraft,
   customModel,
   getState,
   dmWith,
@@ -706,7 +707,8 @@ function MeetTuca({ conv: session, onUse, onManual, onBack }: { conv: { id?: str
   useEffect(() => () => clearTimeout(typed.current), [])
   const error = session.error ?? ''
   const messages = useStore((s) => (conv ? s.messages.filter((m) => m.conversationId === conv) : []))
-  const latest = [...messages].reverse().find((m) => m.run?.agentDraft && !m.run.agentDraft.state)?.run?.agentDraft
+  const latestMsg = [...messages].reverse().find((m) => m.run?.agentDraft && !m.run.agentDraft.state)
+  const latest = latestMsg?.run?.agentDraft
 
   async function start(value: string): Promise<void> {
     if (conv && value === tuca?.modelId) return
@@ -784,8 +786,19 @@ function MeetTuca({ conv: session, onUse, onManual, onBack }: { conv: { id?: str
         </div>
       </section>
       <aside className="onb__aside">
-        {latest ? (
-          <AgentCard agent={draftAgent(latest)} handle={slug(latest.name)} computer="none" />
+        {latest && latestMsg ? (
+          <AgentCard
+            agent={draftAgent(latest)}
+            handle={slug(latest.name)}
+            computer="none"
+            draft={latest}
+            onUse={() => onUse(latest, latestMsg.id)}
+            onDirectCreate={async () => {
+              const { conversationId } = await createFromDraft(latestMsg.id)
+              navigate({ kind: 'conversation', id: conversationId })
+              if (latest.task) sendMessage(conversationId, latest.task)
+            }}
+          />
         ) : (
           <div className="onb-card onb-card--empty">
             {tuca && <AgentAvatar agent={tuca} size={64} />}
@@ -862,12 +875,39 @@ function MakeAgent(p: {
   )
 }
 
-function AgentCard({ agent, handle, computer }: { agent: Agent; handle: string; computer: Computer }): ReactNode {
+function AgentCard({
+  agent,
+  handle,
+  computer,
+  draft,
+  onUse,
+  onDirectCreate
+}: {
+  agent: Agent
+  handle: string
+  computer: Computer
+  draft?: AgentDraft
+  onUse?: () => void
+  onDirectCreate?: () => Promise<void> | void
+}): ReactNode {
   const model = modelInfo(agent.modelId)
   const name = agent.name.trim() || L('Seu agente', 'Your agent')
-  const first = agent.instructions.trim().split(/(?<=\.)\s/)[0]
+  const [creating, setCreating] = useState(false)
+  const [showFull, setShowFull] = useState(false)
+
+  const handleCreate = async (): Promise<void> => {
+    if (creating) return
+    setCreating(true)
+    try {
+      if (onDirectCreate) await onDirectCreate()
+      else if (onUse) onUse()
+    } finally {
+      setCreating(false)
+    }
+  }
+
   return (
-    <div className="onb-card">
+    <div className={`onb-card ${draft ? 'onb-card--ready' : ''}`}>
       <AgentAvatar agent={{ name, color: agent.color }} size={64} />
       <h2>{name}</h2>
       <span className="muted">
@@ -884,12 +924,57 @@ function AgentCard({ agent, handle, computer }: { agent: Agent; handle: string; 
         <Power on={computer !== 'none'} icon={computer === 'mac' ? 'laptop' : 'terminal'} label={computer === 'mac' ? L('Seu computador', 'Your computer') : L('Computador', 'Computer')} />
         <Power on={!!agent.browser} icon="pointer" label={L('Navegador', 'Browser')} />
       </div>
-      <div className="onb-card__bubble">
-        <AgentAvatar agent={{ name, color: agent.color }} size={22} />
-        <p>
-          {L(`Oi! Eu sou ${agent.name.trim() ? `${agent.name.trim()}` : 'o seu agente'}.`, `Hi! I’m ${agent.name.trim() ? `${agent.name.trim()}` : 'your agent'}.`)}{first ? ` ${first}` : L(' Me diz o que eu faço e eu começo.', ' Tell me what I do and I’ll get started.')}
+
+      <div className="onb-card__instructions-box">
+        <div className="onb-card__instructions-head">
+          <span className="muted small font-semibold">{L('Instruções', 'Instructions')}</span>
+          <button className="link small" type="button" onClick={() => setShowFull(!showFull)}>
+            {showFull ? L('Recolher', 'Collapse') : L('Ver tudo', 'Show all')}
+          </button>
+        </div>
+        <p className={`onb-card__instructions-text ${showFull ? 'is-full' : ''}`}>
+          {agent.instructions}
         </p>
       </div>
+
+      {draft?.reason && (
+        <div className="onb-card__reason">
+          <Icon name="spark" size={13} />
+          <span>{draft.reason}</span>
+        </div>
+      )}
+
+      {draft?.task && (
+        <div className="onb-card__first-task">
+          <span className="muted small font-semibold">{L('Primeira tarefa:', 'First task:')}</span>
+          <p>“{draft.task}”</p>
+        </div>
+      )}
+
+      {draft && (
+        <div className="onb-card__actions">
+          <button className="btn btn--primary btn--lg w-full" disabled={creating} onClick={() => void handleCreate()}>
+            <Icon name="plus" size={15} />
+            <span>{creating ? L('Criando agente…', 'Creating agent…') : L('Aprovar e Criar Agente', 'Approve & Create Agent')}</span>
+          </button>
+          {onUse && (
+            <button className="btn btn--ghost btn--sm w-full" onClick={onUse}>
+              <Icon name="edit" size={13} />
+              <span>{L('Personalizar poderes & tarefa', 'Customize powers & task')}</span>
+            </button>
+          )}
+        </div>
+      )}
+
+      {!draft && (
+        <div className="onb-card__bubble">
+          <AgentAvatar agent={{ name, color: agent.color }} size={22} />
+          <p>
+            {L(`Oi! Eu sou ${agent.name.trim() ? `${agent.name.trim()}` : 'o seu agente'}.`, `Hi! I’m ${agent.name.trim() ? `${agent.name.trim()}` : 'your agent'}.`)}
+            {L(' Me diz o que eu faço e eu começo.', ' Tell me what I do and I’ll get started.')}
+          </p>
+        </div>
+      )}
     </div>
   )
 }

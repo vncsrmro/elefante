@@ -33,10 +33,17 @@ export const browserTools = (): ToolDef[] => {
     {
       name: 'navegador_abrir',
       description: L(
-        'Abre um endereço no seu navegador. Devolve o título, o endereço e o que dá pra clicar ou preencher na tela, numerado.',
-        'Opens an address in your browser. Returns the title, the address and what can be clicked or filled in on screen, numbered.'
+        'Abre um endereço no seu navegador. Use abrir_janela: true para abrir a janela visível na tela do usuário (essencial para logins, autenticação Google/Meta e captchas). Devolve o título, o endereço e o que dá pra clicar ou preencher na tela, numerado.',
+        'Opens an address in your browser. Use abrir_janela: true to open the visible window on the user screen (essential for logins, Google/Meta auth and captchas). Returns the title, the address and what can be clicked or filled in on screen, numbered.'
       ),
-      inputSchema: { type: 'object', properties: { url: { type: 'string' } }, required: ['url'] }
+      inputSchema: {
+        type: 'object',
+        properties: {
+          url: { type: 'string', description: L('O endereço da página (ex.: https://labs.google/flow).', 'The page address.') },
+          abrir_janela: { type: 'boolean', description: L('Se true, abre a janela do navegador na tela do usuário para ele interagir ou logar.', 'If true, opens the browser window on the user screen.') }
+        },
+        required: ['url']
+      }
     },
     {
       name: CLICAR,
@@ -374,7 +381,11 @@ export class Browser {
           let url = String(args['url'] ?? '').trim()
           if (url && !/^[a-z]+:/i.test(url)) url = `https://${url}`
           if (!/^https?:\/\//i.test(url)) return { result: textResult(L('Só endereços http e https.', 'Only http and https addresses.'), true) }
-          return { result: await this.after(id, await this.deps.host(id, 'open', { url }), { ...step, detail: url }) }
+          const res = await this.after(id, await this.deps.host(id, 'open', { url }), { ...step, detail: url })
+          if (args['abrir_janela'] === true) {
+            await this.action(agent, 'show')
+          }
+          return { result: res }
         }
         case CLICAR: {
           const target = String(args['alvo'] ?? '').trim()

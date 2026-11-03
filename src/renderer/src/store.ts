@@ -80,6 +80,7 @@ export interface State {
   dialog: Dialog | null // a small window: a channel's members, name or topic; archived agents; new channel; search
   tabs: Record<string, string> // the open tab of each page with tabs, kept while the app is open
   rightPanelOpen: boolean // project explorer & code editor panel on the right
+  activeEditorFile?: string | null
   demoServer?: { command: string; args: string[] }
 }
 
@@ -129,7 +130,8 @@ let state: State = {
   panel: null,
   dialog: null,
   tabs: {},
-  rightPanelOpen: false
+  rightPanelOpen: false,
+  activeEditorFile: null
 }
 
 // ---------- store plumbing ----------
@@ -461,6 +463,8 @@ export function patchAgent(agentId: string, patch: Partial<Agent>): void {
 export const openPanel = (panel: Panel | null): void => set((s) => ({ ...s, panel }))
 export const toggleRightPanel = (): void => set((s) => ({ ...s, rightPanelOpen: !s.rightPanelOpen }))
 export const setRightPanelOpen = (open: boolean): void => set((s) => ({ ...s, rightPanelOpen: open }))
+export const openFileInEditor = (filePath: string): void => set((s) => ({ ...s, rightPanelOpen: true, activeEditorFile: filePath }))
+export const clearActiveEditorFile = (): void => set((s) => ({ ...s, activeEditorFile: null }))
 export const openDialog = (dialog: Dialog | null): void => set((s) => ({ ...s, dialog, navOpen: dialog ? false : s.navOpen }))
 export const setTab = (page: string, tab: string): void => set((s) => ({ ...s, tabs: { ...s.tabs, [page]: tab } }))
 export const computerAction = (agentId: string, action: 'start' | 'restart' | 'erase' | 'open_folder' | 'refresh'): void =>

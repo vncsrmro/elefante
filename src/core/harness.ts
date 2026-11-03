@@ -7,7 +7,7 @@ import { L } from '../shared/lang'
 import type { EngineId, EngineStatus } from '../shared/types'
 
 // The harnesses the app can run agents on; one added later is listed as coming until then.
-export const RUNNABLE: EngineId[] = ['claude', 'codex', 'opencode', 'pi', 'gemini', 'antigravity']
+export const RUNNABLE: EngineId[] = ['api', 'claude', 'codex', 'opencode', 'pi', 'gemini', 'antigravity']
 
 // Off for a harness pointed at a gateway: its own telemetry and error reports
 // would go to Anthropic or OpenAI, around the gateway.
@@ -21,6 +21,11 @@ export function withChoice(engines: Record<EngineId, EngineStatus>, chosen: Engi
   const out = { ...engines }
   for (const e of Object.keys(engines) as EngineId[]) {
     const st = engines[e]
+    if (e === 'api') {
+      // The API Engine is available whenever configured with active models in Provedores & APIs
+      out[e] = st
+      continue
+    }
     if (!RUNNABLE.includes(e)) out[e] = { ...st, loggedIn: false, soon: true }
     else if (chosen && !chosen.includes(e)) out[e] = { ...st, loggedIn: false, off: true }
   }

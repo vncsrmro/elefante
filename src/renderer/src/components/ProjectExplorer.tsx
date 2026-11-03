@@ -1,7 +1,7 @@
 import { useState, useEffect, useMemo, useRef, type ReactNode } from 'react'
 import { L } from '../../../shared/lang'
 import { call } from '../rpc'
-import { openFolderPath, setRightPanelOpen, useStore, type State } from '../store'
+import { clearActiveEditorFile, openFolderPath, setRightPanelOpen, useStore, type State } from '../store'
 import { Icon } from './ui'
 import { CodeHighlight } from './CodeHighlight'
 import type { ProjectFileItem, ProjectFileInfo } from '../../../shared/types'
@@ -98,14 +98,31 @@ export function ProjectExplorer({ currentProject }: { currentProject?: string })
         isDirty: false,
         isBinary: info.isBinary
       }
-      setOpenTabs((prev) => [...prev, newTab])
-      setActiveFileIndex(openTabs.length)
+      setOpenTabs((prev) => {
+        const next = [...prev, newTab]
+        setActiveFileIndex(next.length - 1)
+        return next
+      })
       setActiveTab('editor')
       setEditMode(true)
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err))
     }
   }
+
+  // Auto-open requested file in editor from global store (e.g. from chat markdown link or IPC)
+  const activeEditorFile = useStore((s) => s.activeEditorFile)
+  useEffect(() => {
+    if (!activeEditorFile) return
+    const path = activeEditorFile
+    clearActiveEditorFile()
+    void openFile({
+      name: path.split(/[/\\]/).pop() || path,
+      path: path,
+      relPath: path,
+      kind: 'file'
+    })
+  }, [activeEditorFile])
 
   // Close tab
   const closeTab = (index: number, e?: React.MouseEvent): void => {

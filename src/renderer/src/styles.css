@@ -893,12 +893,14 @@ h3 {
   border: 1px solid var(--border);
   overflow-x: auto;
   max-width: 100%;
+  white-space: pre-wrap;
+  word-break: break-word;
 }
 .md pre code {
   background: none;
   padding: 0;
-  word-break: normal;
-  white-space: pre;
+  word-break: break-word;
+  white-space: pre-wrap;
 }
 .md-code {
   position: relative;
@@ -2857,7 +2859,7 @@ table.csv th {
   display: flex;
 }
 .onb__stage {
-  max-width: 1120px;
+  max-width: 1260px;
   width: 100%;
   margin: auto; /* centered when it fits, scrolls from the top when it doesn't */
   padding: 28px 40px 48px;
@@ -2871,12 +2873,13 @@ table.csv th {
 }
 .onb__split {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 380px;
-  gap: 56px;
+  grid-template-columns: minmax(0, 1.4fr) minmax(360px, 420px);
+  gap: 40px;
   align-items: start;
 }
 .onb__main {
-  max-width: 620px;
+  max-width: 100%;
+  min-width: 0;
 }
 .onb__main--wide {
   max-width: 820px;
@@ -3224,6 +3227,11 @@ table.csv th {
   border-radius: 18px;
   box-shadow: var(--shadow-lg);
   padding: 28px 24px 22px;
+  transition: border-color 0.25s ease, box-shadow 0.25s ease;
+}
+.onb-card--ready {
+  border-color: rgba(99, 102, 241, 0.45);
+  box-shadow: 0 8px 32px rgba(99, 102, 241, 0.12);
 }
 .onb-card h2 {
   margin: 14px 0 2px;
@@ -3241,9 +3249,82 @@ table.csv th {
 .onb-card__powers {
   display: flex;
   gap: 6px;
-  margin: 14px 0 18px;
+  margin: 14px 0 16px;
   flex-wrap: wrap;
   justify-content: center;
+}
+.onb-card__instructions-box {
+  width: 100%;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 12px 14px;
+  margin-bottom: 12px;
+  text-align: left;
+}
+.onb-card__instructions-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 6px;
+}
+.onb-card__instructions-text {
+  margin: 0;
+  font-size: 12.5px;
+  line-height: 1.55;
+  color: var(--text-2);
+  white-space: pre-wrap;
+  word-break: break-word;
+  display: -webkit-box;
+  -webkit-line-clamp: 4;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+.onb-card__instructions-text.is-full {
+  display: block;
+  -webkit-line-clamp: unset;
+  max-height: 240px;
+  overflow-y: auto;
+}
+.onb-card__reason {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+  width: 100%;
+  background: rgba(99, 102, 241, 0.08);
+  border: 1px solid rgba(99, 102, 241, 0.2);
+  border-radius: 10px;
+  padding: 8px 12px;
+  margin-bottom: 12px;
+  font-size: 12px;
+  color: var(--text-2);
+  text-align: left;
+}
+.onb-card__reason svg {
+  flex-shrink: 0;
+  margin-top: 2px;
+  color: var(--accent);
+}
+.onb-card__first-task {
+  width: 100%;
+  background: var(--bg);
+  border-radius: 10px;
+  padding: 8px 12px;
+  margin-bottom: 14px;
+  text-align: left;
+  font-size: 12px;
+}
+.onb-card__first-task p {
+  margin: 4px 0 0;
+  color: var(--text);
+  font-style: italic;
+}
+.onb-card__actions {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  width: 100%;
+  margin-top: 4px;
 }
 .onb-power {
   display: inline-flex;
@@ -4348,13 +4429,18 @@ kbd {
 .draft-card {
   margin-top: 10px;
   border: 1px solid var(--border);
-  border-radius: 12px;
-  padding: 14px;
+  border-radius: 14px;
+  padding: 16px;
   display: flex;
   flex-direction: column;
-  gap: 10px;
-  max-width: 560px;
+  gap: 12px;
+  max-width: 100%;
   background: var(--panel);
+  transition: all 0.2s ease;
+}
+.draft-card:not(.is-settled) {
+  border-color: rgba(99, 102, 241, 0.45);
+  box-shadow: 0 4px 18px rgba(99, 102, 241, 0.1);
 }
 .draft-card.is-settled {
   opacity: 0.7;
@@ -4371,6 +4457,9 @@ kbd {
 .draft-card__instructions {
   margin: 0;
   white-space: pre-wrap;
+  word-break: break-word;
+  line-height: 1.55;
+  font-size: 13.5px;
   display: -webkit-box;
   -webkit-line-clamp: 4;
   -webkit-box-orient: vertical;
@@ -4398,16 +4487,28 @@ kbd {
 }
 .onb-tuca {
   border: 1px solid var(--border);
-  border-radius: 14px;
-  height: 440px;
+  border-radius: 16px;
+  height: clamp(500px, 62vh, 680px);
   display: flex;
   flex-direction: column;
   overflow: hidden;
   margin: 18px 0 6px;
+  background: var(--panel);
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.22);
 }
 .onb-tuca .messages {
   flex: 1;
   min-height: 0;
+}
+.onb-tuca .msg {
+  padding: 8px 16px;
+  max-width: 100%;
+}
+.onb-tuca .md pre,
+.onb-tuca .md pre code {
+  white-space: pre-wrap !important;
+  word-break: break-word !important;
+  overflow-x: hidden !important;
 }
 .onb-tuca__wait {
   margin: auto;

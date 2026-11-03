@@ -13,7 +13,7 @@ import { COMPUTER_TOOL_NAMES, computerTools, stepFor, type Computers } from './c
 import { AGENDAR, CANCELAR, outcome, ROUTINE_TOOL_NAMES, type Routines } from './routines'
 import { ABRIR_PR, GITHUB, type GitHub } from './github'
 import { LER_SKILL, PROPOR_SKILL, SKILL_TOOL_NAMES, type Skills } from './skills'
-import { availableModels, builderSection, draftFrom, PROPOR_AGENTE } from './tuca'
+import { agentFromDraft, availableModels, builderSection, CRIAR_AGENTE, draftFrom, extractDraftFromText, PROPOR_AGENTE } from './tuca'
 import type { Db } from './db'
 import type { Engine, TurnImage } from './engines/types'
 import { textResult, type Gateway, type ToolDef } from './gateway'
@@ -620,7 +620,7 @@ export class Runner {
       ...(prTool ? [prTool] : []),
       ...(canRemember ? [LEMBRAR] : []),
       ...(canSearch ? [BUSCAR_MEMORIAS] : []),
-      ...(builds ? [PROPOR_AGENTE] : []),
+      ...(builds ? [PROPOR_AGENTE, CRIAR_AGENTE] : []),
       ...(computers ? computerTools(projectDir ? { ...agent, computer: true, computerKind: 'mac' } : agent) : []),
       ...(browser ? browserTools() : []),
       ...(apps ? appTools(agent) : []),
@@ -680,6 +680,58 @@ export class Runner {
             L(
               'A proposta está no card, com Criar, Editar antes e Descartar. Termine com uma frase curta (dá pra criar, editar ou pedir ajustes pra você), sem repetir o que o card mostra.',
               "The proposal is in the card, with Create, Edit first and Discard. Finish with one short sentence (they can create it, edit it or ask you for changes), without repeating what the card shows."
+            )
+          )
+        }
+
+        if (name === CRIAR_AGENTE.name && builds) {
+          let targetDraft = msg.run?.agentDraft
+          let targetMsgId = msg.id
+          if (!targetDraft || targetDraft.state === 'created') {
+            const prevMsgs = db.messages().filter((m) => m.conversationId === conv.id).reverse()
+            for (const prev of prevMsgs) {
+              if (prev.run?.agentDraft && prev.run.agentDraft.state !== 'created') {
+                targetDraft = prev.run.agentDraft
+                targetMsgId = prev.id
+                break
+              }
+            }
+          }
+          if (!targetDraft) {
+            const now = await this.deps.settings()
+            const fallback = extractDraftFromText(msg.text, {
+              usable: (id) => { const m = modelInfo(id); return !!m?.id && now.engines[m.engine].loggedIn },
+              fallbackModel: (db.agent(agent.id) ?? agent).modelId,
+              connectors: this.deps.connectors?.list() ?? []
+            })
+            if (fallback?.draft) targetDraft = fallback.draft
+          }
+
+          if (!targetDraft) {
+            return textResult(L('Não encontrei nenhuma proposta de agente pendente para criar. Por favor, proponha o agente antes com propor_agente.', 'No pending agent proposal found to create. Please propose the agent first with propor_agente.'), true)
+          }
+
+          const now = await this.deps.settings()
+          const newAgent = agentFromDraft(targetDraft, db.agents().map((a) => a.handle), now.defaultLimit)
+          db.saveAgent(newAgent)
+          emit({ type: 'agent', agent: newAgent })
+          if (targetMsgId) {
+            const targetMsg = db.message(targetMsgId)
+            if (targetMsg?.run?.agentDraft) {
+              const updatedMsg: Message = { ...targetMsg, run: { ...targetMsg.run, agentDraft: { ...targetMsg.run.agentDraft, state: 'created', agentId: newAgent.id } } }
+              db.saveMessage(updatedMsg)
+              emit({ type: 'message', message: updatedMsg })
+            }
+          }
+          const dmConv: Conversation = { id: randomUUID(), kind: 'dm', name: newAgent.id, members: [newAgent.id] }
+          db.createConversation(dmConv)
+          emit({ type: 'conversation', conversation: dmConv })
+
+          addSteps({ id: randomUUID(), label: L('Criou o agente', 'Created the agent'), detail: `${newAgent.name} (@${newAgent.handle})`, status: 'done' })
+          return textResult(
+            L(
+              `Agente "${newAgent.name}" (@${newAgent.handle}) foi criado e ativado com sucesso no Elefante! Ele já aparece na sua barra lateral e está pronto para receber tarefas.`,
+              `Agent "${newAgent.name}" (@${newAgent.handle}) was successfully created and activated in Elefante! It is now visible in the sidebar and ready for tasks.`
             )
           )
         }
@@ -1136,6 +1188,22 @@ export class Runner {
       )
     }
 
+    if (builds && !msg.run?.agentDraft) {
+      const fullText = (msg.text.trim() || result?.text?.trim() || '')
+      const now = await this.deps.settings()
+      const fallback = extractDraftFromText(fullText, {
+        usable: (id) => { const m = modelInfo(id); return !!m?.id && now.engines[m.engine].loggedIn },
+        fallbackModel: (db.agent(agent.id) ?? agent).modelId,
+        connectors: this.deps.connectors?.list() ?? []
+      })
+      if (fallback?.draft) {
+        msg.run = { ...msg.run!, agentDraft: fallback.draft }
+        if (fallback.cleanText) {
+          msg.text = fallback.cleanText
+        }
+      }
+    }
+
     const base = { depth: opts.depth, work, receipt, question, approvalId: approval?.id, memoryIds: memoryIds.length ? memoryIds : undefined, artifactIds: artifactIds.length ? artifactIds : undefined, services: services.length ? services : undefined, routineIds: routineIds.length ? routineIds : undefined, browser: msg.run?.browser, agentDraft: msg.run?.agentDraft }
     if (control.reason === 'stopped') {
       save({ run: { ...base, status: 'stopped', steps: closeThinking('error', L('Parado', 'Stopped')) } })
@@ -1175,6 +1243,32 @@ export class Runner {
     // Stopped short on its own (a loop, the limit, a failure): you'd want to know. Not when you stopped it.
     const st = msg.run?.status
     if (!opts.routine && (st === 'failed' || st === 'limit_reached')) this.deps.notify?.(L(`${agent.name} parou`, `${agent.name} stopped`), outcome(msg), conv.id, 'done')
+
+    if (builds) {
+      const lastUserMsg = db.messages().filter((m) => m.conversationId === conv.id && m.author.kind === 'me').pop()
+      const promptText = (lastUserMsg?.text ?? '').toLowerCase()
+      const replyText = (msg.text || result?.text || '').toLowerCase()
+      const userApproved = /\b(aprovar|aprovado|pode criar|criar agente|cria ele|cria ela|confirmo|confirmado|salvar agente|pode salvar|perfeito, cria|pode ser|sim, cria)\b/i.test(promptText)
+      const modelClaimedCreation = /\b(agente\s+criado|criei\s+o\s+agente|agente\s+.*?\s+foi\s+criado|pronto!.*criado|criei\s+o\s+novo\s+agente)\b/i.test(replyText)
+      if (userApproved || modelClaimedCreation) {
+        let targetMsg = msg.run?.agentDraft && msg.run.agentDraft.state !== 'created' ? msg : undefined
+        if (!targetMsg) {
+          targetMsg = db.messages().filter((m) => m.conversationId === conv.id && m.run?.agentDraft && m.run.agentDraft.state !== 'created').pop()
+        }
+        if (targetMsg?.run?.agentDraft) {
+          const d = targetMsg.run.agentDraft
+          const newAgent = agentFromDraft(d, db.agents().map((a) => a.handle), settings.defaultLimit)
+          db.saveAgent(newAgent)
+          emit({ type: 'agent', agent: newAgent })
+          targetMsg.run.agentDraft = { ...d, state: 'created', agentId: newAgent.id }
+          db.saveMessage(targetMsg)
+          emit({ type: 'message', message: targetMsg })
+          const dmConv: Conversation = { id: randomUUID(), kind: 'dm', name: newAgent.id, members: [newAgent.id] }
+          db.createConversation(dmConv)
+          emit({ type: 'conversation', conversation: dmConv })
+        }
+      }
+    }
 
     const updated = db.agent(agent.id)
     if (updated) emit({ type: 'agent', agent: updated })

@@ -4,7 +4,7 @@ import { L, locale } from '../../../shared/lang'
 import { useEffect, useState, type ReactNode } from 'react'
 import Markdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
-import { agentById, artifactUrl, browserAction, browserInput, browserOf, reachable, windowless, computerOf, openExternal, openPanel, stopService, useStore, type Artifact } from '../store'
+import { agentById, artifactUrl, browserAction, browserInput, browserOf, reachable, windowless, computerOf, openExternal, openFileInEditor, openPanel, stopService, useStore, type Artifact } from '../store'
 import { call } from '../rpc'
 import { Icon, type IconName } from './ui'
 
@@ -404,6 +404,31 @@ export function SidePanel(): ReactNode {
   )
 }
 
+function PanelMarkdownLink({ href, children, ...props }: React.AnchorHTMLAttributes<HTMLAnchorElement>): ReactNode {
+  const handleClick = (e: React.MouseEvent<HTMLAnchorElement>): void => {
+    if (!href) return
+    e.preventDefault()
+    if (/^https?:\/\//i.test(href)) {
+      openExternal(href)
+      return
+    }
+    let cleanPath = href
+    if (cleanPath.startsWith('file:///')) {
+      cleanPath = decodeURIComponent(cleanPath.replace(/^file:\/\/\//, ''))
+      if (/^[a-zA-Z]:/.test(cleanPath)) cleanPath = cleanPath.replace(/\//g, '\\')
+      else if (!cleanPath.startsWith('/')) cleanPath = '/' + cleanPath
+    } else if (cleanPath.startsWith('file://')) {
+      cleanPath = decodeURIComponent(cleanPath.replace(/^file:\/\//, ''))
+    }
+    openFileInEditor(cleanPath)
+  }
+  return (
+    <a href={href} onClick={handleClick} {...props}>
+      {children}
+    </a>
+  )
+}
+
 function ArtifactView({ artifact }: { artifact: Artifact }): ReactNode {
   const url = artifactUrl(artifact)
   const [text, setText] = useState<string | null>(null)
@@ -435,7 +460,7 @@ function ArtifactView({ artifact }: { artifact: Artifact }): ReactNode {
     case 'pdf':
       return <iframe src={url} title={artifact.title} />
     case 'markdown':
-      return <div className="side-panel__doc md">{text !== null && <Markdown remarkPlugins={[remarkGfm]}>{text}</Markdown>}</div>
+      return <div className="side-panel__doc md">{text !== null && <Markdown remarkPlugins={[remarkGfm]} components={{ a: PanelMarkdownLink }}>{text}</Markdown>}</div>
     case 'csv':
       return <div className="side-panel__doc">{text !== null && <CsvTable text={text} tab={artifact.name.endsWith('.tsv')} />}</div>
     case 'text':

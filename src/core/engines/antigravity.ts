@@ -1,3 +1,6 @@
+import { existsSync, readFileSync, writeFileSync } from 'node:fs'
+import { homedir } from 'node:os'
+import { join } from 'node:path'
 import { lastLines, num, parseJson, runCli, type Parser } from './cli'
 import type { Engine, EngineEvent, Turn, Usage } from './types'
 import { L } from '../../shared/lang'
@@ -118,12 +121,44 @@ export function antigravityModels(): string[] {
     'gemini-4-argon-high',
     'gemini-4-argon-medium',
     'gemini-4-argon-low',
-    'gemini-3.8-flash-high',
+    'gemini-3.8-flash-low',
     'gemini-3.8-flash-medium',
+    'gemini-3.8-flash-high',
     'claude-opus-5-5-high',
     'claude-sonnet-5-5-high',
     'gpt-oss-120b-medium'
   ]
+}
+
+function registerMcpGateway(mcpUrl?: string): () => void {
+  if (!mcpUrl) return () => {}
+  const configPath = join(homedir(), '.gemini', 'config', 'mcp_config.json')
+  try {
+    let cfg: { mcpServers?: Record<string, unknown> } = {}
+    if (existsSync(configPath)) {
+      cfg = JSON.parse(readFileSync(configPath, 'utf8')) as { mcpServers?: Record<string, unknown> }
+    }
+    cfg.mcpServers = cfg.mcpServers ?? {}
+    cfg.mcpServers['elefante'] = {
+      disabled: false,
+      serverUrl: mcpUrl
+    }
+    writeFileSync(configPath, JSON.stringify(cfg, null, 2), 'utf8')
+    return () => {
+      try {
+        if (existsSync(configPath)) {
+          const c = JSON.parse(readFileSync(configPath, 'utf8')) as { mcpServers?: Record<string, unknown> }
+          if (c.mcpServers?.['elefante']) {
+            delete c.mcpServers['elefante']
+            writeFileSync(configPath, JSON.stringify(c, null, 2), 'utf8')
+          }
+        }
+      } catch {}
+    }
+  } catch (e) {
+    console.error('[antigravity] failed to register gateway MCP in mcp_config.json', e)
+    return () => {}
+  }
 }
 
 export function antigravityEngine(bin: () => string | undefined, shellEnv: () => Promise<NodeJS.ProcessEnv> = async () => ({})): Engine {
@@ -135,16 +170,21 @@ export function antigravityEngine(bin: () => string | undefined, shellEnv: () =>
         yield { type: 'error', message: L('O Antigravity (agy) não está instalado. Veja em Configurações.', "Antigravity (agy) isn't installed. See Settings.") }
         return
       }
+      const cleanupMcp = registerMcpGateway(turn.mcpUrl)
       const env = { ...process.env, ...(await shellEnv()) }
-      yield* runCli({
-        bin: path,
-        args: antigravityArgs(turn),
-        stdin: antigravityInput(turn),
-        cwd: turn.cwd,
-        signal: turn.signal,
-        parser: antigravityParser(),
-        env
-      })
+      try {
+        yield* runCli({
+          bin: path,
+          args: antigravityArgs(turn),
+          stdin: antigravityInput(turn),
+          cwd: turn.cwd,
+          signal: turn.signal,
+          parser: antigravityParser(),
+          env
+        })
+      } finally {
+        cleanupMcp()
+      }
     }
   }
 }

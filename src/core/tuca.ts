@@ -17,25 +17,27 @@ export const tucaInstructions = (): string =>
       'Você é o Fante, quem projeta e monta os agentes no Elefante. A pessoa te conta uma tarefa ou uma área que quer delegar, e você desenha o agente certo pra ela.',
       '- Pergunte pouco: no máximo três perguntas, uma por vez, curtas. O que o agente faz (peça um exemplo real), com quais sistemas trabalha e em que tom. O que a pessoa já disse, não pergunte de novo.',
       '- Depois proponha com propor_agente. Não descreva o agente em texto antes: o card mostra tudo, e a pessoa ajusta por ele ou pedindo pra você.',
+      '- NUNCA imprima JSON bruto ou blocos de código com a proposta no texto. Chame SEMPRE a ferramenta propor_agente para exibir o card.',
+      '- Se a pessoa aprovar, disser "pode criar", "aprovar", "cria ele", "ok", "perfeito", chame IMEDIATAMENTE a ferramenta criar_agente para ativar o agente no Elefante. Nunca diga que criou em texto sem chamar a ferramenta.',
       '- As instruções do agente são escritas como pra um colega novo: o que faz, como entrega, o que evita e quando pergunta. De 4 a 8 linhas, em português, falando com ele ("Você...").',
       '- Stack moderna e flexível: Python (uv, FastAPI, IA/automações), TypeScript/React (Vite, Next.js, Cloudflare Workers, Remotion), Supabase e Firebase. Sem Prisma.',
       '- Acesso mínimo: conectores só em leitura, a não ser que a tarefa peça escrita. Web só quando o agente precisa de informação de fora.',
       '- O modelo mais simples que dá conta; esforço alto só pra tarefa difícil.',
       '- Um agente por tarefa clara. Se pedirem algo enorme, sugira dividir em dois.',
-      '- Depois que a pessoa criar, sugira uma primeira tarefa pra testar.',
-      '- Você não cria nada sozinho: a proposta vira um card e a pessoa decide.'
+      '- Depois que a pessoa criar, sugira uma primeira tarefa pra testar.'
     ].join('\n'),
     [
       "You are Fante, who designs and builds agents in Elefante. The person tells you a task or an area they want to hand off, and you design the right agent for it.",
       "- Ask little: three questions at most, one at a time, short. What the agent does (ask for a real example), which systems it works with and in what tone. Don't ask again what the person already said.",
       "- Then propose with propor_agente. Don't describe the agent in text first: the card shows everything, and the person adjusts it there or by asking you.",
+      "- NEVER output raw JSON or code blocks with the proposal in chat text. ALWAYS call the propor_agente tool so the card appears.",
+      '- If the person approves, says "create it", "approved", "ok", "go ahead", call the criar_agente tool IMMEDIATELY to activate the agent in Elefante. Never say you created it in text without calling the tool.',
       '- The agent\'s instructions are written as if for a new colleague: what it does, how it delivers, what it avoids and when it asks. 4 to 8 lines, in English, talking to it ("You...").',
       '- Modern and flexible stack: Python (uv, FastAPI, AI/automation), TypeScript/React (Vite, Next.js, Cloudflare Workers, Remotion), Supabase and Firebase. No Prisma.',
       '- Minimal access: connectors read-only, unless the task needs writing. Web only when the agent needs outside information.',
       '- The simplest model that does the job; high effort only for a hard task.',
       '- One agent per clear task. If they ask for something huge, suggest splitting it in two.',
-      '- Once the person creates it, suggest a first task to test it.',
-      "- You don't create anything on your own: the proposal becomes a card and the person decides."
+      '- Once the person creates it, suggest a first task to test it.'
     ].join('\n')
   )
 
@@ -71,6 +73,24 @@ export const PROPOR_AGENTE: ToolDef = {
   }
 }
 
+export const CRIAR_AGENTE: ToolDef = {
+  name: 'criar_agente',
+  get description() {
+    return L(
+      'Cria e ativa o agente proposto definitivamente no Elefante. Chame sempre que a pessoa aprovar, disser "pode criar", "gostei", "cria ele", ou confirmar a proposta.',
+      'Creates and permanently activates the proposed agent in Elefante. Call whenever the person approves, says "create it", "like it", "go ahead", or confirms the proposal.'
+    )
+  },
+  get inputSchema() {
+    return {
+      type: 'object' as const,
+      properties: {
+        nome: { type: 'string', description: L('Nome do agente proposto a ser criado (opcional).', 'Name of the proposed agent to create (optional).') }
+      }
+    }
+  }
+}
+
 // The models agents can run on now: the listed ones of a ready plan, and what OpenCode and Pi list.
 export function availableModels(s: Pick<Settings, 'engines'>, listed: Partial<Record<string, string[]>> = {}): { id: string; label: string }[] {
   // Codex's own catalog when there is one (newest first); the app's list otherwise.
@@ -102,9 +122,17 @@ export function builderSection(s: Pick<Settings, 'engines'>, ctx: { models: { id
 
 // A propor_agente call as a draft, or what to fix.
 export function draftFrom(args: Record<string, unknown>, ctx: { usable: (modelId: string) => boolean; fallbackModel: string; connectors: Connector[] }): { draft?: AgentDraft; error?: string } {
-  const text = (k: string, max: number): string => (typeof args[k] === 'string' ? (args[k] as string).trim().slice(0, max) : '')
-  const name = text('nome', 40)
-  const instructions = text('instrucoes', 4000)
+  const text = (keys: string | string[], max: number): string => {
+    const list = Array.isArray(keys) ? keys : [keys]
+    for (const k of list) {
+      if (typeof args[k] === 'string' && (args[k] as string).trim()) {
+        return (args[k] as string).trim().slice(0, max)
+      }
+    }
+    return ''
+  }
+  const name = text(['nome', 'name'], 40)
+  const instructions = text(['instrucoes', 'instruções', 'instructions', 'prompt'], 4000)
   if (!name || !instructions) return { error: L('Faltou nome ou instrucoes.', 'Missing nome or instrucoes.') }
   const grants: Record<string, GrantLevel> = {}
   const unknown: string[] = []
@@ -119,22 +147,50 @@ export function draftFrom(args: Record<string, unknown>, ctx: { usable: (modelId
     const names = unknown.map((u) => `"${u}"`).join(', ')
     return { error: L(`Não existe conector ${names}. Use só os da lista, ou deixe sem e diga que dá pra conectar depois.`, `There's no connector ${names}. Use only the ones in the list, or leave it out and say it can be connected later.`) }
   }
-  const model = text('modelo', 200)
-  const effort = EFFORTS.includes(args['esforco'] as Effort) ? (args['esforco'] as Effort) : 'medium'
+  const model = text(['modelo', 'model'], 200)
+  const effortRaw = (args['esforco'] ?? args['esforço'] ?? args['effort']) as Effort
+  const effort = EFFORTS.includes(effortRaw) ? effortRaw : 'medium'
+  const task = text(['primeira_tarefa', 'sugestao_primeira_tarefa', 'first_task', 'task', 'tarefa'], 500)
+  const reason = text(['motivo', 'reason', 'justificativa'], 300)
+  const role = text(['funcao', 'função', 'role', 'papel'], 40)
   return {
     draft: {
       name,
-      role: text('funcao', 40),
+      role,
       color: COLORS.includes(args['cor'] as AgentColor) ? (args['cor'] as AgentColor) : 'teal',
       instructions,
       modelId: model && modelInfo(model) && ctx.usable(model) ? model : ctx.fallbackModel,
       effort,
       web: args['web'] === true,
       grants,
-      ...(text('primeira_tarefa', 500) ? { task: text('primeira_tarefa', 500) } : {}),
-      ...(text('motivo', 300) ? { reason: text('motivo', 300) } : {})
+      ...(task ? { task } : {}),
+      ...(reason ? { reason } : {})
     }
   }
+}
+
+// Fallback: extracts an agent proposal from chat text if the model returned raw JSON instead of calling propor_agente
+export function extractDraftFromText(
+  rawText: string,
+  ctx: { usable: (modelId: string) => boolean; fallbackModel: string; connectors: Connector[] }
+): { draft?: AgentDraft; cleanText?: string } | null {
+  if (!rawText) return null
+  const jsonMatch = rawText.match(/```(?:json)?\s*([\s\S]*?)\s*```/) || rawText.match(/(\{[\s\S]*"(?:nome|name)"[\s\S]*"(?:instrucoes|instruções|instructions)"[\s\S]*\})/)
+  if (jsonMatch) {
+    try {
+      const parsed = JSON.parse(jsonMatch[1] ?? jsonMatch[0])
+      if (typeof parsed === 'object' && parsed !== null) {
+        const res = draftFrom(parsed, ctx)
+        if (res.draft) {
+          const cleanText = rawText.replace(jsonMatch[0], '').trim() || L('Preparei a proposta do agente abaixo. Você pode criar agora ou pedir ajustes.', 'I prepared the agent proposal below. You can create it now or ask for adjustments.')
+          return { draft: res.draft, cleanText }
+        }
+      }
+    } catch {
+      // not JSON
+    }
+  }
+  return null
 }
 
 // "Rafa" → "rafa", or "rafa-2" when taken.

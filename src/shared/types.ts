@@ -307,7 +307,7 @@ export const countedTokens = (u: { inputTokens: number; cacheReadTokens: number;
 
 // `windows`: the install command for PowerShell, where the POSIX one doesn't run.
 export const ENGINES: Record<EngineId, { label: string; cli: string; login: string; install: string; windows?: string; site: string }> = {
-  api: { label: 'Provedores & APIs (Hermes)', cli: 'elefante-api', login: 'Configurações → Provedores & APIs', install: 'Integrado ao Elefante', site: 'https://openrouter.ai' },
+  api: { label: 'Provedores & APIs (Local / Nuvem)', cli: 'elefante-api', login: 'Configurações → Provedores & APIs', install: 'Integrado ao Elefante', site: 'https://openrouter.ai' },
   claude: { label: 'Claude Code', cli: 'claude', login: 'claude auth login', install: 'curl -fsSL https://claude.ai/install.sh | bash', windows: 'irm https://claude.ai/install.ps1 | iex', site: 'https://code.claude.com' },
   codex: { label: 'Codex', cli: 'codex', login: 'codex login', install: 'npm install -g @openai/codex', site: 'https://github.com/openai/codex' },
   opencode: { label: 'OpenCode', cli: 'opencode', login: 'opencode auth login', install: 'curl -fsSL https://opencode.ai/install | bash', windows: 'npm install -g opencode-ai', site: 'https://opencode.ai' },
@@ -340,7 +340,9 @@ export const MODELS: Model[] = [
   model('gpt-5.6-sol', 'codex', 'GPT-5.6 Sol', 'O mais capaz, mais lento', 'The most capable, slower'),
   model('gemini-4-argon-high', 'antigravity', 'Gemini 4 Argon (High)', 'O mais novo e capaz', 'Newest and most capable'),
   model('gemini-4-argon-medium', 'antigravity', 'Gemini 4 Argon (Medium)', 'Equilibrado e rápido', 'Balanced and fast'),
-  model('gemini-3.8-flash-high', 'antigravity', 'Gemini 3.8 Flash (High)', 'Ultra rápido e inteligente', 'Ultra fast and smart'),
+  model('gemini-3.8-flash-low', 'antigravity', 'Gemini 3.8 Flash (Low)', 'Instantâneo (2s), ideal pro Fante', 'Instant (2s), ideal for Fante'),
+  model('gemini-3.8-flash-medium', 'antigravity', 'Gemini 3.8 Flash (Medium)', 'Equilibrado e ágil', 'Balanced and agile'),
+  model('gemini-3.8-flash-high', 'antigravity', 'Gemini 3.8 Flash (High)', 'Raciocínio profundo (lento)', 'Deep reasoning (slower)'),
   model('claude-opus-5-5-high', 'antigravity', 'Claude Opus 5.5 (High)', 'Raciocínio complexo', 'Complex reasoning')
 ]
 

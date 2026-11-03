@@ -12,6 +12,8 @@ import {
   loadReport,
   localSkills,
   navigate,
+  openExternal,
+  openFileInEditor,
   removeSkill,
   restoreSkill,
   saveSkill,
@@ -41,6 +43,31 @@ function result(r?: SkillReport): string {
 }
 
 const from = (k: Skill): string => (k.source ? L(`do seu ${k.source.includes('/.codex/') ? 'Codex' : 'Claude Code'}`, `from your ${k.source.includes('/.codex/') ? 'Codex' : 'Claude Code'}`) : L(`mudou ${ago(k.updatedAt)}`, `changed ${ago(k.updatedAt)}`))
+
+function SkillMarkdownLink({ href, children, ...props }: React.AnchorHTMLAttributes<HTMLAnchorElement>): ReactNode {
+  const handleClick = (e: React.MouseEvent<HTMLAnchorElement>): void => {
+    if (!href) return
+    e.preventDefault()
+    if (/^https?:\/\//i.test(href)) {
+      openExternal(href)
+      return
+    }
+    let cleanPath = href
+    if (cleanPath.startsWith('file:///')) {
+      cleanPath = decodeURIComponent(cleanPath.replace(/^file:\/\/\//, ''))
+      if (/^[a-zA-Z]:/.test(cleanPath)) cleanPath = cleanPath.replace(/\//g, '\\')
+      else if (!cleanPath.startsWith('/')) cleanPath = '/' + cleanPath
+    } else if (cleanPath.startsWith('file://')) {
+      cleanPath = decodeURIComponent(cleanPath.replace(/^file:\/\//, ''))
+    }
+    openFileInEditor(cleanPath)
+  }
+  return (
+    <a href={href} onClick={handleClick} {...props}>
+      {children}
+    </a>
+  )
+}
 
 export function SkillsPage(): ReactNode {
   const skills = useStore((s) => s.skills)
@@ -221,7 +248,7 @@ function SkillPage({ skill: k, stat, onBack, onEdit }: { skill: Skill; stat?: Sk
         <h2>{L('Receita', 'Recipe')}</h2>
         {k.body.trim() ? (
           <article className="recipe">
-            <Markdown remarkPlugins={[remarkGfm]}>{k.body}</Markdown>
+            <Markdown remarkPlugins={[remarkGfm]} components={{ a: SkillMarkdownLink }}>{k.body}</Markdown>
           </article>
         ) : (
           <p className="read-empty">{L(`A receita é lida de ${k.source} a cada uso.`, `The recipe is read from ${k.source} on every use.`)}</p>
@@ -431,7 +458,7 @@ function Proposal({ proposal: p }: { proposal: Skill }): ReactNode {
             <span>{L('Quando usar:', 'When to use:')}</span> {p.description}
           </p>
           <article className="recipe recipe--box">
-            <Markdown remarkPlugins={[remarkGfm]}>{p.body}</Markdown>
+            <Markdown remarkPlugins={[remarkGfm]} components={{ a: SkillMarkdownLink }}>{p.body}</Markdown>
           </article>
           <p className="proposal__who">
             {L('Vale pra', 'For')} <Who ids={p.agents} />. {L('Depois de aprovar, dá pra liberar pra outros agentes.', 'After approving, you can open it to other agents.')}

@@ -1,6 +1,6 @@
 import { useEffect, type ReactNode } from 'react'
 import { L } from '../../shared/lang'
-import { getState, navigate, openDialog, setNav, toggleRightPanel, useStore } from './store'
+import { getState, navigate, openDialog, openFileInEditor, setNav, toggleRightPanel, useStore } from './store'
 import { Sidebar } from './components/Sidebar'
 import { ConversationView } from './components/Conversation'
 import { AgentPage, ApprovalsPage, ConnectorsPage, SettingsPage } from './components/Pages'
@@ -46,6 +46,9 @@ export function App(): ReactNode {
       if (cmd === 'close-tab') {
         window.dispatchEvent(new CustomEvent('elefante:close-tab'))
       }
+    })
+    window.elefante?.onOpenFileInEditor?.((filePath) => {
+      openFileInEditor(filePath)
     })
   }, [])
 

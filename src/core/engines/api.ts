@@ -262,9 +262,10 @@ export function apiEngine(
   return {
     id: 'api',
     async *run(turn: Turn): AsyncIterable<EngineEvent> {
-      const slash = turn.model.indexOf('/')
-      const providerId = (slash > 0 ? turn.model.slice(0, slash) : 'openrouter') as ApiProviderId
-      const modelName = slash > 0 ? turn.model.slice(slash + 1) : turn.model
+      const cleanModel = turn.model.startsWith('api:') ? turn.model.slice(4) : turn.model
+      const slash = cleanModel.indexOf('/')
+      const providerId = (slash > 0 ? cleanModel.slice(0, slash) : 'openrouter') as ApiProviderId
+      const modelName = slash > 0 ? cleanModel.slice(slash + 1) : cleanModel
 
       const presets = defaultApiProviders()
       const userCfg = getConfig()?.[providerId]

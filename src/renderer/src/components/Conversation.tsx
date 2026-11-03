@@ -7,6 +7,8 @@ import {
   agentById,
   conversationTitle,
   openDialog,
+  openExternal,
+  openFileInEditor,
   openFolderPath,
   pickConversationProject,
   loadProjectCliContext,
@@ -292,7 +294,7 @@ function MessageRow({ message, grouped }: { message: Message; grouped: boolean }
     return (
       <div className={`system-line ${message.run?.status === 'working' ? 'is-pending' : ''}`}>
         <Icon name="spark" size={13} />
-        <Markdown>{message.text}</Markdown>
+        <Markdown components={{ a: MarkdownLink }}>{message.text}</Markdown>
         <span className="muted">{time(message.at)}</span>
       </div>
     )
@@ -327,7 +329,7 @@ function MessageRow({ message, grouped }: { message: Message; grouped: boolean }
         {message.run && <RunSteps message={message} />}
         {message.text ? (
           <div className="md">
-            <Markdown remarkPlugins={[remarkGfm]} components={{ pre: CodeBlock }}>{highlightMentions(message.text)}</Markdown>
+            <Markdown remarkPlugins={[remarkGfm]} components={{ pre: CodeBlock, a: MarkdownLink }}>{highlightMentions(message.text)}</Markdown>
           </div>
         ) : null}
         {!agent && <span className="msg__my-time">{time(message.at)}</span>}
@@ -404,10 +406,61 @@ function RoutineMessage({ message }: { message: Message }): ReactNode {
           </div>
         )}
         <div className="md">
-          <Markdown remarkPlugins={[remarkGfm]} components={{ pre: CodeBlock }}>{highlightMentions(message.text)}</Markdown>
+          <Markdown remarkPlugins={[remarkGfm]} components={{ pre: CodeBlock, a: MarkdownLink }}>{highlightMentions(message.text)}</Markdown>
         </div>
       </div>
     </article>
+  )
+}
+
+// Custom markdown link handler: opens web links in default browser, file paths in the lateral editor
+function MarkdownLink({ href, children, ...props }: React.AnchorHTMLAttributes<HTMLAnchorElement>): ReactNode {
+  const handleClick = (e: React.MouseEvent<HTMLAnchorElement>): void => {
+    if (!href) return
+    e.preventDefault()
+
+    // 1. External Web links
+    if (/^https?:\/\//i.test(href)) {
+      openExternal(href)
+      return
+    }
+
+    // 2. File URLs (e.g. file:///D:/path/file.md or file://...)
+    let cleanPath = href
+    if (cleanPath.startsWith('file:///')) {
+      cleanPath = decodeURIComponent(cleanPath.replace(/^file:\/\/\//, ''))
+      // On Windows, normalize path
+      if (/^[a-zA-Z]:/.test(cleanPath)) {
+        cleanPath = cleanPath.replace(/\//g, '\\')
+      } else if (!cleanPath.startsWith('/')) {
+        cleanPath = '/' + cleanPath
+      }
+    } else if (cleanPath.startsWith('file://')) {
+      cleanPath = decodeURIComponent(cleanPath.replace(/^file:\/\//, ''))
+    }
+
+    // Check if it's a file path or has a common code/text/doc extension
+    if (
+      /^[a-zA-Z]:[/\\]/.test(cleanPath) ||
+      cleanPath.startsWith('\\\\') ||
+      cleanPath.startsWith('/') ||
+      /\.(md|txt|json|js|ts|tsx|jsx|css|html|py|rs|go|yaml|yml|sh|bat|ps1|sql|env)$/i.test(cleanPath)
+    ) {
+      openFileInEditor(cleanPath)
+      return
+    }
+
+    if (href.includes('://')) {
+      openExternal(href)
+    } else {
+      openFileInEditor(cleanPath)
+    }
+  }
+
+  return (
+    <a href={href} onClick={handleClick} {...props}>
+      {children}
+    </a>
   )
 }
 

@@ -99,13 +99,21 @@ export function AgentProposal({ message }: { message: Message }): ReactNode {
         ) : replaced ? (
           <span className="muted small">{L('Trocada por uma proposta mais nova.', 'Replaced by a newer proposal.')}</span>
         ) : use ? (
-          <button className="btn btn--primary btn--sm" onClick={() => use(d, message.id)}>
-            {L('Usar esse agente', 'Use this agent')}
-          </button>
+          <div className="row row--gap-sm">
+            <button className="btn btn--primary btn--sm" disabled={busy} onClick={() => void create()}>
+              <Icon name="plus" size={13} /> {d.task ? L('Criar e testar', 'Create and test') : L('Criar agora', 'Create now')}
+            </button>
+            <button className="btn btn--secondary btn--sm" onClick={() => use(d, message.id)}>
+              <Icon name="edit" size={13} /> {L('Personalizar', 'Customize')}
+            </button>
+            <button className="btn btn--ghost btn--sm" onClick={() => settleDraft(message.id)}>
+              {L('Descartar', 'Dismiss')}
+            </button>
+          </div>
         ) : (
           <>
             <button className="btn btn--primary btn--sm" disabled={busy} onClick={() => void create()}>
-              {d.task ? L('Criar e testar', 'Create and try it') : L('Criar', 'Create')}
+              <Icon name="plus" size={13} /> {d.task ? L('Criar e testar', 'Create and try it') : L('Criar', 'Create')}
             </button>
             <button className="btn btn--sm" onClick={() => navigate({ kind: 'new-agent', draft: draftAgent(d), fromMessage: message.id })}>
               {L('Editar antes', 'Edit first')}

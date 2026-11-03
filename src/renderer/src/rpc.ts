@@ -13,6 +13,7 @@ declare global {
       onUpdate: (cb: (state: UpdateState) => void) => void
       checkUpdates: () => void
       installUpdate: () => void
+      onOpenFileInEditor?: (cb: (filePath: string) => void) => void
     }
   }
 }

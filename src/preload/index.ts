@@ -25,5 +25,8 @@ contextBridge.exposeInMainWorld('elefante', {
     ipcRenderer.on('update', (_e, state: unknown) => cb(state))
   },
   checkUpdates: (): void => ipcRenderer.send('update:check'),
-  installUpdate: (): void => ipcRenderer.send('update:install')
+  installUpdate: (): void => ipcRenderer.send('update:install'),
+  onOpenFileInEditor: (cb: (filePath: string) => void): void => {
+    ipcRenderer.on('open-file-in-editor', (_e, path: unknown) => typeof path === 'string' && cb(path))
+  }
 })
