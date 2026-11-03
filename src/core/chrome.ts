@@ -246,7 +246,7 @@ export class ChromeBrowsers {
     ]
     const proc = spawn(this.bin, args, { stdio: 'ignore' })
     let port = ''
-    for (let i = 0; i < 75 && !port; i++) {
+    for (let i = 0; i < 150 && !port; i++) {
       await wait(200)
       if (proc.exitCode !== null) throw new Error(L('o Chrome fechou logo ao abrir', 'Chrome closed right after opening'))
       try {
@@ -255,7 +255,7 @@ export class ChromeBrowsers {
     }
     if (!port) {
       proc.kill()
-      throw new Error(L('o Chrome não abriu em 15 s', "Chrome didn't open in 15 s"))
+      throw new Error(L('o Chrome não abriu a tempo', "Chrome didn't open in time"))
     }
     const onFrame = this.onFrame
     const tab = new Tab(proc, headed, onFrame && ((jpeg) => onFrame(agentId, jpeg)))
