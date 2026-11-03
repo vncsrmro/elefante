@@ -104,6 +104,7 @@ export function chromeCandidates(os: Os = osOf(), env: NodeJS.ProcessEnv = proce
     ]
   } else {
     const roots = [env['ProgramFiles'], env['ProgramFiles(x86)'], env['LOCALAPPDATA']].filter((r): r is string => !!r)
+    const effectiveRoots = roots.length > 0 ? roots : ['C:\\Program Files', 'C:\\Program Files (x86)']
     const browserTails = [
       join('Google', 'Chrome', 'Application', 'chrome.exe'),
       join('BraveSoftware', 'Brave-Browser', 'Application', 'brave.exe'),
@@ -111,7 +112,7 @@ export function chromeCandidates(os: Os = osOf(), env: NodeJS.ProcessEnv = proce
       join('Chromium', 'Application', 'chrome.exe')
     ]
     for (const tail of browserTails) {
-      for (const r of roots) {
+      for (const r of effectiveRoots) {
         list.push(join(r, tail))
       }
     }
