@@ -842,19 +842,80 @@ export class Runner {
           if (!current?.computer && !projectDir) return textResult(L('Seu computador foi desligado.', 'Your computer was turned off.'), true)
           const effAgent = current ? (projectDir ? { ...current, computer: true, computerKind: 'mac' as const } : current) : agent
           const t0 = Date.now()
-          const { label, detail } = stepFor(name, args, effAgent.computerKind === 'mac')
-          const step: Step = { id: randomUUID(), label, detail, status: 'running' }
+          const { label, detail } = stepFor(name, args, effAgent.computerKind === 'mac', true)
+          const rawCommand = name === 'bash' ? String(args['command'] ?? '').trim() : undefined
+          const step: Step = { id: randomUUID(), label, detail, status: 'running', command: rawCommand }
+
+          if (name === 'start_service' && (!msg.run?.todos || msg.run.todos.length === 0)) {
+            const svcName = String(args['name'] || 'serviço')
+            const svcPort = args['port'] ? ` (porta ${args['port']})` : ''
+            msg.run = {
+              ...msg.run!,
+              todos: [
+                { id: 'todo_svc_1', title: L(`Preparar e verificar ambiente para ${svcName}`, `Prepare and check environment for ${svcName}`), status: 'done' },
+                { id: 'todo_svc_2', title: L(`Iniciar serviço ${svcName}${svcPort}`, `Start service ${svcName}${svcPort}`), status: 'in_progress' },
+                { id: 'todo_svc_3', title: L(`Aguardar porta ${args['port'] || ''} e testar disponibilidade`, `Wait for port ${args['port'] || ''} and test availability`), status: 'pending' },
+                { id: 'todo_svc_4', title: L(`Disponibilizar acesso e confirmar no chat`, `Provide access and confirm in chat`), status: 'pending' }
+              ]
+            }
+          } else if (name === 'bash' && (!msg.run?.todos || msg.run.todos.length === 0)) {
+            const firstLine = (rawCommand || '').split('\n')[0] || ''
+            if (firstLine && !/^(ls|dir|pwd|whoami|echo|cd)\b/.test(firstLine)) {
+              msg.run = {
+                ...msg.run!,
+                todos: [
+                  { id: 'todo_cmd_1', title: L(`Executar no terminal: ${firstLine.slice(0, 50)}`, `Run in terminal: ${firstLine.slice(0, 50)}`), status: 'in_progress' }
+                ]
+              }
+            }
+          }
+
+          let accumulatedOutput = ''
+          let lastOutputFlush = 0
+          const onOutput = (chunk: string): void => {
+            accumulatedOutput = (accumulatedOutput + chunk).slice(-15_000)
+            step.output = accumulatedOutput
+            const lines = accumulatedOutput.trim().split(/\r?\n/)
+            const lastLine = lines.reverse().find((l) => l.trim().length > 0)
+            if (lastLine && lastLine.trim().length > 0) {
+              step.detail = lastLine.trim().length > 140 ? `${lastLine.trim().slice(0, 140)}…` : lastLine.trim()
+            }
+            const now = Date.now()
+            if (now - lastOutputFlush > 250) {
+              lastOutputFlush = now
+              save()
+            }
+          }
+
           flush()
           msg.run = { ...msg.run!, steps: [...closeThinking('done', THOUGHT()), step] }
           save()
-          const out = await computers.call(effAgent, name, args, { conversationId: conv.id, messageId: msg.id, projectDir, rtkEnabled: settings.rtkEnabled !== false, signal: control.ctl.signal })
+          const out = await computers.call(effAgent, name, args, { conversationId: conv.id, messageId: msg.id, projectDir, rtkEnabled: settings.rtkEnabled !== false, signal: control.ctl.signal, onOutput })
           if (out.artifact) artifactIds.push(out.artifact.id)
           if (out.service && !services.includes(out.service)) services.push(out.service)
+
+          const isErr = !!out.result.isError
+          if (!step.output && out.result.content?.[0] && 'text' in out.result.content[0]) {
+            step.output = String(out.result.content[0].text).slice(-15_000)
+          }
+
+          if (msg.run?.todos?.some((t) => t.id === 'todo_svc_2')) {
+            msg.run.todos = msg.run.todos.map((t) => {
+              if (t.id === 'todo_svc_2') return { ...t, status: 'done' as const }
+              if (t.id === 'todo_svc_3') return { ...t, status: isErr ? ('cancelled' as const) : ('done' as const) }
+              if (t.id === 'todo_svc_4') return { ...t, status: isErr ? ('cancelled' as const) : ('done' as const) }
+              return t
+            })
+          } else if (msg.run?.todos?.some((t) => t.id === 'todo_cmd_1')) {
+            msg.run.todos = msg.run.todos.map((t) => (t.id === 'todo_cmd_1' ? { ...t, status: isErr ? ('cancelled' as const) : ('done' as const) } : t))
+          }
+
+          const doneLabel = stepFor(name, args, effAgent.computerKind === 'mac', false).label
           msg.run = {
             ...msg.run!,
             artifactIds: artifactIds.length ? [...artifactIds] : undefined,
             services: services.length ? [...services] : undefined,
-            steps: [...msg.run!.steps.map((s) => (s.id === step.id ? { ...s, status: out.result.isError ? ('error' as const) : ('done' as const), ms: Date.now() - t0 } : s)), thinking()]
+            steps: [...msg.run!.steps.map((s) => (s.id === step.id ? { ...s, label: doneLabel, status: isErr ? ('error' as const) : ('done' as const), ms: Date.now() - t0 } : s)), thinking()]
           }
           stepStarted = Date.now()
           save()

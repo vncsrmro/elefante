@@ -138,7 +138,7 @@ export function wrapWithRtk(command: string, rtkEnabled = true): string {
   return `rtk ${trimmed}`
 }
 
-function run(command: string, opts: { cwd: string; env: NodeJS.ProcessEnv; timeoutSeconds: number; signal?: AbortSignal }): Promise<Exec> {
+function run(command: string, opts: { cwd: string; env: NodeJS.ProcessEnv; timeoutSeconds: number; signal?: AbortSignal; onOutput?: (chunk: string) => void }): Promise<Exec> {
   return new Promise((resolve) => {
     // Its own process group, so a timeout or a stop takes the children with it.
     // (On Windows, detached would open a console window; taskkill finds the tree anyway.)
@@ -147,8 +147,14 @@ function run(command: string, opts: { cwd: string; env: NodeJS.ProcessEnv; timeo
     let stdout = ''
     let stderr = ''
     let timedOut = false
-    child.stdout.setEncoding('utf8').on('data', (d: string) => (stdout = (stdout + d).slice(-2_000_000)))
-    child.stderr.setEncoding('utf8').on('data', (d: string) => (stderr = (stderr + d).slice(-200_000)))
+    child.stdout.setEncoding('utf8').on('data', (d: string) => {
+      stdout = (stdout + d).slice(-2_000_000)
+      opts.onOutput?.(d)
+    })
+    child.stderr.setEncoding('utf8').on('data', (d: string) => {
+      stderr = (stderr + d).slice(-200_000)
+      opts.onOutput?.(d)
+    })
     const killGroup = (sig: NodeJS.Signals): void => {
       if (child.pid) killTree(child.pid, sig)
     }
@@ -274,7 +280,7 @@ export class MacComputer {
     return (this.deps.env ?? loginEnv)()
   }
 
-  private async startService(agent: Agent, args: Record<string, unknown>, cwd: string, signal?: AbortSignal): Promise<ToolOutcome> {
+  private async startService(agent: Agent, args: Record<string, unknown>, cwd: string, signal?: AbortSignal, onOutput?: (chunk: string) => void): Promise<ToolOutcome> {
     const name = typeof args['name'] === 'string' ? args['name'].trim() : ''
     const command = typeof args['command'] === 'string' ? args['command'].trim() : ''
     const port = Number(args['port'])
@@ -300,8 +306,21 @@ export class MacComputer {
     this.deps.db.saveService(agent.id, { name, command, port, startedAt: Date.now() })
 
     let open = false
+    let lastLogLen = 0
     for (let i = 0; i < 60 && !signal?.aborted && alive(child.pid); i++) {
       if ((open = await portOpen(port))) break
+      try {
+        if (existsSync(log)) {
+          const currentLog = readFileSync(log, 'utf8')
+          if (currentLog.length > lastLogLen) {
+            const chunk = currentLog.slice(lastLogLen)
+            lastLogLen = currentLog.length
+            onOutput?.(chunk)
+          }
+        }
+      } catch {
+        /* ignore read errors during write */
+      }
       await new Promise((r) => setTimeout(r, 1000))
     }
     this.refresh(agent)
@@ -390,7 +409,19 @@ export class MacComputer {
     return { result: { content: [{ type: 'image', data: png.toString('base64'), mimeType: 'image/png' }, { type: 'text', text: L(`Print de ${url}, mostrado no chat e salvo em ${saved}.`, `Screenshot of ${url}, shown in the chat and saved at ${saved}.`) }] }, artifact: kept }
   }
 
-  async call(agent: Agent, name: string, args: Record<string, unknown>, ctx: { conversationId: string; messageId: string; projectDir?: string; rtkEnabled?: boolean; signal?: AbortSignal }): Promise<ToolOutcome> {
+  async call(
+    agent: Agent,
+    name: string,
+    args: Record<string, unknown>,
+    ctx: {
+      conversationId: string
+      messageId: string
+      projectDir?: string
+      rtkEnabled?: boolean
+      signal?: AbortSignal
+      onOutput?: (chunk: string) => void
+    }
+  ): Promise<ToolOutcome> {
     const cwd = this.cwd(agent, ctx.projectDir)
     const path = (): string => macPath(String(args['path'] ?? ''), cwd)
     switch (name) {
@@ -399,7 +430,7 @@ export class MacComputer {
         if (!rawCommand) return { result: textResult(L('Faltou o comando.', 'Missing the command.'), true) }
         const command = wrapWithRtk(rawCommand, ctx.rtkEnabled !== false)
         const t = Math.min(600, Math.max(1, Number(args['timeout_seconds']) || 120))
-        const r = await run(command, { cwd, env: await this.env(), timeoutSeconds: t, signal: ctx.signal })
+        const r = await run(command, { cwd, env: await this.env(), timeoutSeconds: t, signal: ctx.signal, onOutput: ctx.onOutput })
         return { result: textResult(formatExec(r, t), r.code !== 0) }
       }
       case 'read_file':
@@ -422,7 +453,7 @@ export class MacComputer {
         return { result: r.isError ? r : textResult(edited(file, count)) }
       }
       case 'start_service':
-        return this.startService(agent, args, cwd, ctx.signal)
+        return this.startService(agent, args, cwd, ctx.signal, ctx.onOutput)
       case 'stop_service': {
         const svc = String(args['name'] ?? '')
         if (!this.deps.db.services(agent.id).some((s) => s.name === svc)) return { result: textResult(noService(svc), true) }

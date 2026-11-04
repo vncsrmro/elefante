@@ -328,13 +328,19 @@ const q = (s: string): string => `'${s.replace(/'/g, `'\\''`)}'`
 
 type Exec = { code: number; stdout: string; stderr: string }
 
-function docker(args: string[], opts: { stdin?: string | Buffer; timeoutMs?: number; signal?: AbortSignal } = {}): Promise<Exec> {
+function docker(args: string[], opts: { stdin?: string | Buffer; timeoutMs?: number; signal?: AbortSignal; onOutput?: (chunk: string) => void } = {}): Promise<Exec> {
   return new Promise((resolve) => {
     const child = spawn('docker', args, { stdio: ['pipe', 'pipe', 'pipe'] })
     let stdout = ''
     let stderr = ''
-    child.stdout.setEncoding('utf8').on('data', (d: string) => (stdout = (stdout + d).slice(-2_000_000)))
-    child.stderr.setEncoding('utf8').on('data', (d: string) => (stderr = (stderr + d).slice(-200_000)))
+    child.stdout.setEncoding('utf8').on('data', (d: string) => {
+      stdout = (stdout + d).slice(-2_000_000)
+      opts.onOutput?.(d)
+    })
+    child.stderr.setEncoding('utf8').on('data', (d: string) => {
+      stderr = (stderr + d).slice(-200_000)
+      opts.onOutput?.(d)
+    })
     const kill = (): void => void child.kill('SIGKILL')
     const timer = opts.timeoutMs ? setTimeout(kill, opts.timeoutMs) : null
     opts.signal?.addEventListener('abort', kill, { once: true })
@@ -598,14 +604,14 @@ export class Computers {
     this.set(agentId, { state: agent?.computer ? 'stopped' : 'off', services: [] })
   }
 
-  async exec(agentId: string, command: string, opts: { timeoutSeconds?: number; signal?: AbortSignal; stdin?: string | Buffer } = {}): Promise<Exec> {
+  async exec(agentId: string, command: string, opts: { timeoutSeconds?: number; signal?: AbortSignal; stdin?: string | Buffer; onOutput?: (chunk: string) => void } = {}): Promise<Exec> {
     const t = Math.min(600, Math.max(1, Math.round(opts.timeoutSeconds ?? 120)))
     const head = ['exec', ...(opts.stdin !== undefined ? ['-i'] : []), '-w', WORK, '-e', 'TERM=dumb', this.name(agentId)]
     // `timeout` runs inside, so the command stops even if the docker client is killed.
     const run = ['timeout', '-k', '5', String(t), 'bash', '-lc', command]
     const owner = await this.hostOwner(agentId)
     const args = owner ? [...head, 'bash', '-c', ownedBack(run.map(q).join(' '), this.shared(agentId), owner.uid, owner.gid)] : [...head, ...run]
-    return docker(args, { timeoutMs: (t + 15) * 1000, signal: opts.signal, stdin: opts.stdin })
+    return docker(args, { timeoutMs: (t + 15) * 1000, signal: opts.signal, stdin: opts.stdin, onOutput: opts.onOutput })
   }
 
   // The folders this computer writes into that are also the person's: /work and what's lent.
@@ -667,7 +673,7 @@ export class Computers {
     return r.code === 0
   }
 
-  private async startService(agentId: string, args: Record<string, unknown>, signal?: AbortSignal): Promise<ToolOutcome> {
+  private async startService(agentId: string, args: Record<string, unknown>, signal?: AbortSignal, onOutput?: (chunk: string) => void): Promise<ToolOutcome> {
     const name = typeof args['name'] === 'string' ? args['name'].trim() : ''
     const command = typeof args['command'] === 'string' ? args['command'].trim() : ''
     const port = Number(args['port'])
@@ -698,6 +704,10 @@ export class Computers {
       where = listening(net, port)
       alive = tail.includes('alive')
       if (where || !alive) break
+      try {
+        const liveTail = (await this.exec(agentId, `tail -n 25 ${q(log)}`, { timeoutSeconds: 5 })).stdout.trim()
+        if (liveTail) onOutput?.(liveTail + '\n')
+      } catch {}
       await new Promise((res) => setTimeout(res, 1000))
     }
     const services = await this.refreshServices(agentId)
@@ -842,7 +852,19 @@ export class Computers {
 
   // ---------- the tools ----------
 
-  async call(agent: Agent, name: string, args: Record<string, unknown>, ctx: { conversationId: string; messageId: string; projectDir?: string; rtkEnabled?: boolean; signal?: AbortSignal }): Promise<ToolOutcome> {
+  async call(
+    agent: Agent,
+    name: string,
+    args: Record<string, unknown>,
+    ctx: {
+      conversationId: string
+      messageId: string
+      projectDir?: string
+      rtkEnabled?: boolean
+      signal?: AbortSignal
+      onOutput?: (chunk: string) => void
+    }
+  ): Promise<ToolOutcome> {
     if (agent.computerKind === 'mac' || ctx.projectDir) return this.mac.call(agent, name, args, ctx)
     try {
       await this.ensure(agent.id)
@@ -854,7 +876,7 @@ export class Computers {
         const command = String(args['command'] ?? '').trim()
         if (!command) return { result: textResult(L('Faltou o comando.', 'Missing the command.'), true) }
         const t = Math.min(600, Math.max(1, Number(args['timeout_seconds']) || 120))
-        const r = await this.exec(agent.id, command, { timeoutSeconds: t, signal: ctx.signal })
+        const r = await this.exec(agent.id, command, { timeoutSeconds: t, signal: ctx.signal, onOutput: ctx.onOutput })
         return { result: textResult(formatExec(r, t), r.code !== 0) }
       }
       case 'read_file':
@@ -864,7 +886,7 @@ export class Computers {
       case 'edit_file':
         return { result: await this.editFile(agent.id, args) }
       case 'start_service':
-        return this.startService(agent.id, args, ctx.signal)
+        return this.startService(agent.id, args, ctx.signal, ctx.onOutput)
       case 'stop_service': {
         const svc = String(args['name'] ?? '')
         if (!this.deps.db.services(agent.id).some((s) => s.name === svc)) return { result: textResult(noService(svc), true) }
@@ -882,27 +904,33 @@ export class Computers {
 }
 
 // A one-line description of a computer tool call, for its step in the chat.
-export function stepFor(name: string, args: Record<string, unknown>, onMac = false): { label: string; detail: string } {
+export function stepFor(name: string, args: Record<string, unknown>, onMac = false, isRunning = true): { label: string; detail: string } {
   const s = (k: string): string => String(args[k] ?? '')
   const containerPath = (p: string): string => (onMac ? p : linuxPath(p))
   const short = (t: string): string => (t.length > 140 ? `${t.slice(0, 140)}…` : t)
   switch (name) {
     case 'bash':
-      return { label: L('Rodou', 'Ran'), detail: short(s('command').split('\n')[0] ?? '') }
+      return {
+        label: isRunning ? L('Executando no terminal', 'Running in terminal') : L('Executou no terminal', 'Ran in terminal'),
+        detail: short(s('command').split('\n')[0] ?? '')
+      }
     case 'read_file':
-      return { label: L('Leu', 'Read'), detail: containerPath(s('path')) }
+      return { label: isRunning ? L('Lendo arquivo', 'Reading file') : L('Leu', 'Read'), detail: containerPath(s('path')) }
     case 'write_file':
-      return { label: L('Escreveu', 'Wrote'), detail: containerPath(s('path')) }
+      return { label: isRunning ? L('Escrevendo arquivo', 'Writing file') : L('Escreveu', 'Wrote'), detail: containerPath(s('path')) }
     case 'edit_file':
-      return { label: L('Editou', 'Edited'), detail: containerPath(s('path')) }
+      return { label: isRunning ? L('Editando arquivo', 'Editing file') : L('Editou', 'Edited'), detail: containerPath(s('path')) }
     case 'start_service':
-      return { label: L('Subiu', 'Started'), detail: `${s('name')} · ${L('porta', 'port')} ${s('port')}` }
+      return {
+        label: isRunning ? L('Iniciando serviço', 'Starting service') : L('Subiu serviço', 'Started service'),
+        detail: `${s('name')} · ${L('porta', 'port')} ${s('port')}`
+      }
     case 'stop_service':
-      return { label: L('Parou', 'Stopped'), detail: s('name') }
+      return { label: isRunning ? L('Parando serviço', 'Stopping service') : L('Parou serviço', 'Stopped service'), detail: s('name') }
     case 'screenshot':
-      return { label: L('Tirou print', 'Took a screenshot'), detail: s('url') }
+      return { label: isRunning ? L('Tirando print', 'Taking screenshot') : L('Tirou print', 'Took a screenshot'), detail: s('url') }
     case 'show_file':
-      return { label: L('Mostrou', 'Showed'), detail: containerPath(s('path')) }
+      return { label: isRunning ? L('Mostrando arquivo', 'Showing file') : L('Mostrou', 'Showed'), detail: containerPath(s('path')) }
     default:
       return { label: name, detail: '' }
   }

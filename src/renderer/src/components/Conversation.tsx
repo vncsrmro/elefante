@@ -682,11 +682,12 @@ function RunTodos({ todos }: { todos: TodoItem[] }): ReactNode {
 }
 
 // One quiet line: what the agent is doing now (and for how long), or how many
-// steps it took. The steps themselves open on a click.
+// steps it took. The steps themselves open on a click, or automatically while working.
 function RunSteps({ message }: { message: Message }): ReactNode {
   const run = message.run!
-  const [open, setOpen] = useState(false)
   const working = run.status === 'working'
+  const [manuallyToggled, setManuallyToggled] = useState<boolean | null>(null)
+  const open = manuallyToggled !== null ? manuallyToggled : working
   const now = useNow(working)
 
   if (run.steps.length === 0 && !working) return null
@@ -696,7 +697,7 @@ function RunSteps({ message }: { message: Message }): ReactNode {
 
   return (
     <div className={`steps ${open ? 'is-open' : ''} ${working ? 'is-working' : ''}`}>
-      <button className="steps__toggle" onClick={() => setOpen(!open)}>
+      <button className="steps__toggle" onClick={() => setManuallyToggled(!open)} type="button">
         {working ? (
           <span className="steps__pulse" />
         ) : (
@@ -705,7 +706,10 @@ function RunSteps({ message }: { message: Message }): ReactNode {
           </span>
         )}
         {working ? (
-          <span className="shimmer">{current ? `${current.label}…` : L('Pensando…', 'Thinking…')}</span>
+          <span className="steps__working-label shimmer">
+            <span className="steps__working-title">{current ? current.label : L('Pensando…', 'Thinking…')}</span>
+            {current?.detail && <span className="steps__working-detail">· {current.detail}</span>}
+          </span>
         ) : (
           <span>
             {run.steps.length} {L(`passo${run.steps.length === 1 ? '' : 's'}`, `step${run.steps.length === 1 ? '' : 's'}`)}
@@ -738,15 +742,104 @@ function RunSteps({ message }: { message: Message }): ReactNode {
   )
 }
 
-function StepRow({ step }: { step: Step }): ReactNode {
+function TerminalViewer({ output, isRunning, command }: { output: string; isRunning: boolean; command?: string }): ReactNode {
+  const bottomRef = useRef<HTMLDivElement>(null)
+  const [copied, setCopied] = useState(false)
+  const [expanded, setExpanded] = useState(false)
+
+  useEffect(() => {
+    if (isRunning && bottomRef.current) {
+      bottomRef.current.scrollIntoView({ behavior: 'smooth' })
+    }
+  }, [output, isRunning])
+
+  const copy = (e: React.MouseEvent): void => {
+    e.stopPropagation()
+    navigator.clipboard.writeText(output)
+    setCopied(true)
+    setTimeout(() => setCopied(false), 1500)
+  }
+
+  const lines = output.trim().split(/\r?\n/)
+  const isLong = lines.length > 25
+  const displayOutput = expanded || isRunning || !isLong ? output : lines.slice(-25).join('\n')
+
   return (
-    <li className={`step step--${step.status}`}>
-      <span className="step__icon">
-        {step.status === 'running' ? <span className="spinner" /> : <Icon name={step.status === 'done' ? 'check' : 'x'} size={12} />}
-      </span>
-      <span className="step__label">{step.label}</span>
-      {step.note ? <span className="step__note">{step.note}</span> : step.detail && <code className="step__detail">{step.detail}</code>}
-      {step.ms !== undefined && <span className="step__ms">{duration(step.ms)}</span>}
+    <div className={`step-terminal ${isRunning ? 'is-running' : ''}`}>
+      <div className="step-terminal__header">
+        <div className="step-terminal__dots">
+          <span className="step-terminal__dot step-terminal__dot--red" />
+          <span className="step-terminal__dot step-terminal__dot--yellow" />
+          <span className="step-terminal__dot step-terminal__dot--green" />
+        </div>
+        <span className="step-terminal__title">
+          <Icon name="terminal" size={11} />
+          {command ? <code>{command.slice(0, 45)}</code> : L('Terminal / Logs', 'Terminal / Logs')}
+        </span>
+        <div className="step-terminal__actions">
+          {isRunning && (
+            <span className="step-terminal__live-badge">
+              <span className="step-terminal__pulse" />
+              {L('Ao vivo', 'Live')}
+            </span>
+          )}
+          {isLong && !isRunning && (
+            <button
+              type="button"
+              className="step-terminal__btn"
+              onClick={(e) => {
+                e.stopPropagation()
+                setExpanded(!expanded)
+              }}
+            >
+              {expanded ? L('Recolher', 'Collapse') : L(`Ver tudo (${lines.length} linhas)`, `View all (${lines.length} lines)`)}
+            </button>
+          )}
+          <button type="button" className="step-terminal__btn" onClick={copy} title={L('Copiar saída', 'Copy output')}>
+            {copied ? <Icon name="check" size={11} /> : <Icon name="copy" size={11} />}
+          </button>
+        </div>
+      </div>
+      <div className="step-terminal__body">
+        <pre className="step-terminal__content">
+          {displayOutput}
+          {isRunning && <span className="step-terminal__cursor">▌</span>}
+        </pre>
+        <div ref={bottomRef} />
+      </div>
+    </div>
+  )
+}
+
+function StepRow({ step }: { step: Step }): ReactNode {
+  const isRunning = step.status === 'running'
+  const hasOutput = !!step.output && step.output.trim().length > 0
+  const [showTerminal, setShowTerminal] = useState(isRunning || hasOutput)
+
+  return (
+    <li className={`step step--${step.status} ${hasOutput ? 'has-terminal' : ''}`}>
+      <div className="step__header">
+        <span className="step__icon">
+          {isRunning ? <span className="spinner" /> : <Icon name={step.status === 'done' ? 'check' : 'x'} size={12} />}
+        </span>
+        <span className="step__label">{step.label}</span>
+        {step.note ? <span className="step__note">{step.note}</span> : step.detail && <code className="step__detail">{step.detail}</code>}
+        {hasOutput && (
+          <button
+            type="button"
+            className="step__terminal-toggle"
+            onClick={() => setShowTerminal(!showTerminal)}
+            title={showTerminal ? L('Ocultar terminal', 'Hide terminal') : L('Exibir terminal', 'Show terminal')}
+          >
+            <Icon name="terminal" size={11} />
+            <span>{showTerminal ? L('Ocultar', 'Hide') : L('Terminal', 'Terminal')}</span>
+          </button>
+        )}
+        {step.ms !== undefined && <span className="step__ms">{duration(step.ms)}</span>}
+      </div>
+      {hasOutput && showTerminal && (
+        <TerminalViewer output={step.output!} isRunning={isRunning} command={step.command} />
+      )}
     </li>
   )
 }

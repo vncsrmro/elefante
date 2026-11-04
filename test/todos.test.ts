@@ -138,4 +138,20 @@ describe('gerenciar_tarefas (To-Do List)', () => {
     const steps = run?.steps ?? []
     expect(steps.some((s) => s.label.includes('To-Do'))).toBe(true)
   })
+
+  it('stepFor returns active labels while running and completed labels when done', async () => {
+    const { stepFor } = await import('../src/core/computer')
+    const running = stepFor('bash', { command: 'npm run build' }, true, true)
+    expect(running.label).toContain('Executando')
+    expect(running.detail).toBe('npm run build')
+
+    const done = stepFor('bash', { command: 'npm run build' }, true, false)
+    expect(done.label).toContain('Executou')
+
+    const svcRunning = stepFor('start_service', { name: 'api', port: 3000 }, true, true)
+    expect(svcRunning.label).toContain('Iniciando serviço')
+
+    const svcDone = stepFor('start_service', { name: 'api', port: 3000 }, true, false)
+    expect(svcDone.label).toContain('Subiu serviço')
+  })
 })

@@ -131,6 +131,8 @@ export interface Step {
   note?: string // what the agent said while working, before this step's tool call
   status: StepStatus
   ms?: number
+  output?: string // live or completed terminal stdout/stderr, service logs
+  command?: string // raw command for terminal steps
 }
 
 export type TodoStatus = 'pending' | 'in_progress' | 'done' | 'cancelled'

@@ -151,6 +151,12 @@ describe('an agent whose computer is this Mac', () => {
     expect(text(r.result)).toContain(slashes(work))
   })
 
+  it('streams output via onOutput callback during command execution', async () => {
+    let chunks = ''
+    await mac.call(db.agent('prod-0001')!, 'bash', { command: 'echo "hello live stream"' }, { ...ctx, onOutput: (c) => (chunks += c) })
+    expect(chunks).toContain('hello live stream')
+  })
+
   it('describes this computer and its system in the tools, the steps and the prompt', () => {
     const me = db.agent('prod-0001')!
     expect(computerTools(me).map((t) => t.name)).toEqual(linuxTools().map((t) => t.name))
