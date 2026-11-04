@@ -10157,3 +10157,187 @@ select:focus {
   font-size: 11px;
   color: var(--text-3);
 }
+
+/* ==========================================================================
+   Governance Drag-and-Drop, Back Button, Toast and Markdown Image Enhancements
+   ========================================================================== */
+
+.gov-header__left {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+
+.gov-back-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid var(--border);
+  color: var(--text-2);
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  flex-shrink: 0;
+}
+
+.gov-back-btn:hover {
+  background: rgba(255, 255, 255, 0.1);
+  color: var(--text);
+  border-color: rgba(255, 255, 255, 0.2);
+}
+
+.gov-drag-grip {
+  font-size: 11px;
+  opacity: 0.35;
+  cursor: grab;
+  padding-right: 4px;
+  user-select: none;
+  transition: opacity 0.15s ease;
+  letter-spacing: -1px;
+}
+
+.gov-agent-leaf-card:hover .gov-drag-grip,
+.gov-dept-agent-row:hover .gov-drag-grip {
+  opacity: 0.85;
+}
+
+.gov-agent-leaf-card[draggable="true"],
+.gov-dept-agent-row[draggable="true"] {
+  cursor: grab;
+}
+
+.gov-agent-leaf-card.is-dragging,
+.gov-dept-agent-row.is-dragging {
+  opacity: 0.4;
+  transform: scale(0.96);
+  border-style: dashed !important;
+  cursor: grabbing !important;
+}
+
+.gov-leader-column.is-drag-target .gov-leader-card,
+.gov-root-card.is-drag-target,
+.gov-dept-card.is-drag-target {
+  border-color: #38bdf8 !important;
+  box-shadow: 0 0 20px rgba(56, 189, 248, 0.35) !important;
+  transform: scale(1.02);
+  transition: all 0.15s ease;
+  background: rgba(56, 189, 248, 0.05) !important;
+}
+
+.gov-drop-hint {
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  margin-top: 4px;
+  animation: govPulse 1.2s infinite;
+}
+
+@keyframes govPulse {
+  0%, 100% { opacity: 0.6; transform: scale(0.98); }
+  50% { opacity: 1; transform: scale(1.02); }
+}
+
+.gov-toast {
+  position: fixed;
+  bottom: 28px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: var(--panel, #18191c);
+  border: 1px solid rgba(56, 189, 248, 0.4);
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5), 0 0 15px rgba(56, 189, 248, 0.15);
+  border-radius: 999px;
+  padding: 10px 22px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--text);
+  font-size: 13px;
+  font-weight: 500;
+  z-index: 1000;
+  animation: govToastIn 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+@keyframes govToastIn {
+  from {
+    opacity: 0;
+    transform: translate(-50%, 12px) scale(0.96);
+  }
+  to {
+    opacity: 1;
+    transform: translate(-50%, 0) scale(1);
+  }
+}
+
+/* Chat Markdown Images & Visualizer Cards */
+.md-image-card {
+  display: inline-flex;
+  flex-direction: column;
+  margin: 10px 0;
+  border-radius: 10px;
+  overflow: hidden;
+  border: 1px solid var(--border);
+  background: var(--panel);
+  cursor: pointer;
+  transition: all 0.15s ease;
+  max-width: 100%;
+}
+
+.md-image-card:hover {
+  border-color: #38bdf8;
+  transform: translateY(-1px);
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.25);
+}
+
+.md-image-card img {
+  max-width: 100%;
+  max-height: 480px;
+  object-fit: contain;
+  display: block;
+}
+
+.md-image-card__caption {
+  font-size: 11px;
+  color: var(--text-2);
+  padding: 6px 12px;
+  background: rgba(255, 255, 255, 0.02);
+  border-top: 1px solid var(--border);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+/* Project Explorer Image Frame & Meta */
+.editor-image-frame {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  overflow: auto;
+  background: repeating-conic-gradient(rgba(255, 255, 255, 0.03) 0% 25%, transparent 0% 50%) 50% / 20px 20px;
+  width: 100%;
+}
+
+.editor-image-frame img {
+  max-width: 90%;
+  max-height: 70vh;
+  object-fit: contain;
+  border-radius: 8px;
+  box-shadow: 0 8px 30px rgba(0, 0, 0, 0.35);
+  border: 1px solid var(--border);
+}
+
+.editor-image-meta {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-top: 14px;
+  font-size: 12px;
+  color: var(--text-2);
+}

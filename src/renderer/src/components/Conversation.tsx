@@ -3,6 +3,7 @@ import { CODE_SPANS } from '../../../shared/types'
 import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react'
 import Markdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
+import { call } from '../rpc'
 import {
   agentById,
   conversationTitle,
@@ -295,7 +296,7 @@ function MessageRow({ message, grouped }: { message: Message; grouped: boolean }
     return (
       <div className={`system-line ${message.run?.status === 'working' ? 'is-pending' : ''}`}>
         <Icon name="spark" size={13} />
-        <Markdown components={{ a: MarkdownLink }}>{message.text}</Markdown>
+        <Markdown components={{ a: MarkdownLink, img: MarkdownImage }}>{message.text}</Markdown>
         <span className="muted">{time(message.at)}</span>
       </div>
     )
@@ -331,7 +332,7 @@ function MessageRow({ message, grouped }: { message: Message; grouped: boolean }
         {message.run && <RunSteps message={message} />}
         {message.text ? (
           <div className="md">
-            <Markdown remarkPlugins={[remarkGfm]} components={{ pre: CodeBlock, a: MarkdownLink }}>{highlightMentions(message.text)}</Markdown>
+            <Markdown remarkPlugins={[remarkGfm]} components={{ pre: CodeBlock, a: MarkdownLink, img: MarkdownImage }}>{highlightMentions(message.text)}</Markdown>
           </div>
         ) : null}
         {!agent && <span className="msg__my-time">{time(message.at)}</span>}
@@ -408,7 +409,7 @@ function RoutineMessage({ message }: { message: Message }): ReactNode {
           </div>
         )}
         <div className="md">
-          <Markdown remarkPlugins={[remarkGfm]} components={{ pre: CodeBlock, a: MarkdownLink }}>{highlightMentions(message.text)}</Markdown>
+          <Markdown remarkPlugins={[remarkGfm]} components={{ pre: CodeBlock, a: MarkdownLink, img: MarkdownImage }}>{highlightMentions(message.text)}</Markdown>
         </div>
       </div>
     </article>
@@ -421,7 +422,7 @@ function MarkdownLink({ href, children, ...props }: React.AnchorHTMLAttributes<H
     if (!href) return
     e.preventDefault()
 
-    // 1. External Web links
+    // 1. External Web links (http:// or https://)
     if (/^https?:\/\//i.test(href)) {
       openExternal(href)
       return
@@ -431,7 +432,6 @@ function MarkdownLink({ href, children, ...props }: React.AnchorHTMLAttributes<H
     let cleanPath = href
     if (cleanPath.startsWith('file:///')) {
       cleanPath = decodeURIComponent(cleanPath.replace(/^file:\/\/\//, ''))
-      // On Windows, normalize path
       if (/^[a-zA-Z]:/.test(cleanPath)) {
         cleanPath = cleanPath.replace(/\//g, '\\')
       } else if (!cleanPath.startsWith('/')) {
@@ -439,30 +439,70 @@ function MarkdownLink({ href, children, ...props }: React.AnchorHTMLAttributes<H
       }
     } else if (cleanPath.startsWith('file://')) {
       cleanPath = decodeURIComponent(cleanPath.replace(/^file:\/\//, ''))
+      if (/^[a-zA-Z]:/.test(cleanPath)) {
+        cleanPath = cleanPath.replace(/\//g, '\\')
+      }
     }
 
-    // Check if it's a file path or has a common code/text/doc extension
-    if (
-      /^[a-zA-Z]:[/\\]/.test(cleanPath) ||
-      cleanPath.startsWith('\\\\') ||
-      cleanPath.startsWith('/') ||
-      /\.(md|txt|json|js|ts|tsx|jsx|css|html|py|rs|go|yaml|yml|sh|bat|ps1|sql|env)$/i.test(cleanPath)
-    ) {
-      openFileInEditor(cleanPath)
-      return
-    }
-
-    if (href.includes('://')) {
-      openExternal(href)
-    } else {
-      openFileInEditor(cleanPath)
-    }
+    // Open file or directory in lateral editor/viewer
+    openFileInEditor(cleanPath)
   }
 
   return (
     <a href={href} onClick={handleClick} {...props}>
       {children}
     </a>
+  )
+}
+
+function MarkdownImage({ src, alt, ...props }: React.ImgHTMLAttributes<HTMLImageElement>): ReactNode {
+  const [dataSrc, setDataSrc] = useState<string | undefined>(src)
+
+  useEffect(() => {
+    if (!src) return
+    // If it's a local file or file URI, load through readProjectFile to get base64 data URL
+    if (src.startsWith('file:') || /^[a-zA-Z]:[/\\]/.test(src) || src.startsWith('/')) {
+      let cleanPath = src
+      if (cleanPath.startsWith('file:///')) {
+        cleanPath = decodeURIComponent(cleanPath.replace(/^file:\/\/\//, ''))
+        if (/^[a-zA-Z]:/.test(cleanPath)) cleanPath = cleanPath.replace(/\//g, '\\')
+      } else if (cleanPath.startsWith('file://')) {
+        cleanPath = decodeURIComponent(cleanPath.replace(/^file:\/\//, ''))
+        if (/^[a-zA-Z]:/.test(cleanPath)) cleanPath = cleanPath.replace(/\//g, '\\')
+      }
+      void call('readProjectFile', { filePath: cleanPath })
+        .then((info) => {
+          if (info.content && info.content.startsWith('data:image')) {
+            setDataSrc(info.content)
+          }
+        })
+        .catch(() => {})
+    }
+  }, [src])
+
+  const handleClick = (e: React.MouseEvent): void => {
+    e.stopPropagation()
+    if (!src) return
+    let cleanPath = src
+    if (cleanPath.startsWith('file:///')) {
+      cleanPath = decodeURIComponent(cleanPath.replace(/^file:\/\/\//, ''))
+      if (/^[a-zA-Z]:/.test(cleanPath)) cleanPath = cleanPath.replace(/\//g, '\\')
+    } else if (cleanPath.startsWith('file://')) {
+      cleanPath = decodeURIComponent(cleanPath.replace(/^file:\/\//, ''))
+      if (/^[a-zA-Z]:/.test(cleanPath)) cleanPath = cleanPath.replace(/\//g, '\\')
+    }
+    openFileInEditor(cleanPath)
+  }
+
+  return (
+    <span
+      className="md-image-card"
+      onClick={handleClick}
+      title={L('Clique para abrir no visualizador de arquivos e código', 'Click to open in files & code viewer')}
+    >
+      <img src={dataSrc} alt={alt || ''} {...props} />
+      {alt && <span className="md-image-card__caption">{alt}</span>}
+    </span>
   )
 }
 

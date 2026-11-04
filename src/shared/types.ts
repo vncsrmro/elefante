@@ -841,6 +841,7 @@ export interface ProjectFileInfo {
   content: string
   size: number
   isBinary: boolean
+  isFolder?: boolean
   language: string
 }
 

@@ -2,14 +2,13 @@ import { useState, useMemo, type ReactNode } from 'react'
 import { L } from '../../../shared/lang'
 import {
   type Agent,
-  type AgentColor,
   isTeam,
   navigate,
+  navigateBack,
   openDm,
   openTuca,
   patchAgent,
   useStore,
-  saveAgent,
   newAgentDraft
 } from '../store'
 import { AgentAvatar, Icon, TucaMark } from './ui'
@@ -65,6 +64,18 @@ export function GovernancePage(): ReactNode {
   const [templateModalOpen, setTemplateModalOpen] = useState(false)
   const [showGuide, setShowGuide] = useState(true)
 
+  // Drag-and-drop state
+  const [draggedAgentId, setDraggedAgentId] = useState<string | null>(null)
+  const [dragOverLeader, setDragOverLeader] = useState<string | null>(null)
+  const [dragOverChief, setDragOverChief] = useState(false)
+  const [dragOverDept, setDragOverDept] = useState<string | null>(null)
+  const [toastMessage, setToastMessage] = useState<string | null>(null)
+
+  const showToast = (msg: string): void => {
+    setToastMessage(msg)
+    setTimeout(() => setToastMessage(null), 3500)
+  }
+
   // Identify Chief of Staff (Braço Direito)
   const chief = useMemo(() => {
     const designated = agents.find((a) => a.isChiefOfStaff)
@@ -118,18 +129,83 @@ export function GovernancePage(): ReactNode {
   const totalBotsCount = (chief ? 1 : 0) + teamAgents.length
   const totalLeadersCount = Math.max(1, leaderGroups.length)
 
+  // Drag and drop handlers
+  const handleDropOnLeader = (leaderName: string, department: string, role: string): void => {
+    if (!draggedAgentId) return
+    const agent = agents.find((a) => a.id === draggedAgentId)
+    if (!agent) return
+
+    patchAgent(agent.id, {
+      responsible: leaderName,
+      department: department,
+      responsibleRole: role,
+      isChiefOfStaff: false
+    })
+
+    showToast(L(`✨ ${agent.name} agora responde a ${leaderName} (${department})!`, `✨ ${agent.name} now reports to ${leaderName} (${department})!`))
+    setDraggedAgentId(null)
+    setDragOverLeader(null)
+  }
+
+  const handleDropOnChief = (): void => {
+    if (!draggedAgentId) return
+    const agent = agents.find((a) => a.id === draggedAgentId)
+    if (!agent) return
+
+    for (const a of agents) {
+      if (a.id !== agent.id && a.isChiefOfStaff) {
+        patchAgent(a.id, { isChiefOfStaff: false })
+      }
+    }
+
+    patchAgent(agent.id, {
+      isChiefOfStaff: true,
+      department: 'Executivo',
+      role: agent.role || 'Braço Direito'
+    })
+
+    showToast(L(`⭐ ${agent.name} foi definido como o Braço Direito da empresa!`, `⭐ ${agent.name} is now the Chief of Staff!`))
+    setDraggedAgentId(null)
+    setDragOverChief(false)
+  }
+
+  const handleDropOnDept = (deptName: string): void => {
+    if (!draggedAgentId) return
+    const agent = agents.find((a) => a.id === draggedAgentId)
+    if (!agent) return
+
+    patchAgent(agent.id, {
+      department: deptName
+    })
+
+    showToast(L(`✨ ${agent.name} transferido para o setor de ${deptName}!`, `✨ ${agent.name} moved to ${deptName}!`))
+    setDraggedAgentId(null)
+    setDragOverDept(null)
+  }
+
   return (
     <div className="gov-page">
-      {/* Top Header matching reference image */}
+      {/* Top Header with Back Button and Mode Toggle */}
       <header className="gov-header">
-        <div className="gov-header__title-group">
-          <h1 className="gov-title">{L('Quem cuida de quem', 'Who manages who')}</h1>
-          <p className="gov-subtitle">
-            {L(
-              `${totalBotsCount} agentes e as ${totalLeadersCount} pessoas responsáveis por eles`,
-              `${totalBotsCount} agents and the ${totalLeadersCount} people responsible for them`
-            )}
-          </p>
+        <div className="gov-header__left">
+          <button
+            className="btn btn--sm gov-back-btn"
+            onClick={navigateBack}
+            title={L('Voltar para a tela anterior', 'Back to previous view')}
+          >
+            <Icon name="back" size={14} />
+            <span>{L('Voltar', 'Back')}</span>
+          </button>
+
+          <div className="gov-header__title-group">
+            <h1 className="gov-title">{L('Quem cuida de quem', 'Who manages who')}</h1>
+            <p className="gov-subtitle">
+              {L(
+                `${totalBotsCount} agentes e as ${totalLeadersCount} pessoas responsáveis por eles`,
+                `${totalBotsCount} agents and the ${totalLeadersCount} people responsible for them`
+              )}
+            </p>
+          </div>
         </div>
 
         <div className="gov-header__actions">
@@ -170,15 +246,15 @@ export function GovernancePage(): ReactNode {
         <div className="gov-guide-banner">
           <div className="gov-guide-banner__content">
             <div className="gov-guide-banner__badge">
-              <span>{L('GOVERNANÇA & AUTONOMIA', 'GOVERNANCE & AUTONOMY')}</span>
+              <span>{L('GOVERNANÇA & AUTONOMIA · ARRASTE E SOLTE ATIVADO', 'GOVERNANCE & AUTONOMY · DRAG & DROP ENABLED')}</span>
             </div>
             <h3 className="gov-guide-banner__heading">
               {L('O Teste dos 2 Dias Off: sua empresa roda sem você?', 'The 2-Day Off Test: does your business run without you?')}
             </h3>
             <p className="gov-guide-banner__text">
               {L(
-                'Muitos criam bots soltos sem hierarquia e continuam sobrecarregados. Para ter uma empresa autônoma que não para se você ficar 2 dias offline, estruture quem cuida de quem: 1 Braço Direito geral (Fante), líderes para cada setor e bots com rotinas bem definidas.',
-                'Many deploy isolated bots without hierarchy and remain overwhelmed. To build an autonomous business that keeps running if you go offline for 2 days, assign who manages who: 1 Chief of Staff (Fante), leads per area, and bots with routines.'
+                'Muitos criam bots soltos sem hierarquia e continuam sobrecarregados. Para ter uma empresa autônoma que não para se você ficar 2 dias offline, estruture quem cuida de quem: 1 Braço Direito geral (Fante), líderes para cada setor e bots com rotinas bem definidas. Arraste qualquer bot para mudar seu líder na hora!',
+                'Many deploy isolated bots without hierarchy and remain overwhelmed. To build an autonomous business that keeps running if you go offline for 2 days, assign who manages who: 1 Chief of Staff (Fante), leads per area, and bots with routines. Drag and drop any bot to reassign instantly!'
               )}
             </p>
           </div>
@@ -197,12 +273,22 @@ export function GovernancePage(): ReactNode {
       <div className="gov-canvas">
         {mode === 'people' ? (
           <div className="gov-tree-container">
-            {/* Root Node: Chief of Staff / Braço Direito */}
+            {/* Root Node: Chief of Staff / Braço Direito (Drop Zone) */}
             <div className="gov-root-wrapper">
               <div
-                className="gov-root-card"
+                className={`gov-root-card ${dragOverChief ? 'is-drag-target' : ''}`}
+                onDragOver={(e) => {
+                  e.preventDefault()
+                  e.dataTransfer.dropEffect = 'move'
+                  setDragOverChief(true)
+                }}
+                onDragLeave={() => setDragOverChief(false)}
+                onDrop={(e) => {
+                  e.preventDefault()
+                  handleDropOnChief()
+                }}
                 onClick={() => chief && setEditingAgent(chief)}
-                title={L('Clique para configurar o Braço Direito', 'Click to configure Chief of Staff')}
+                title={L('Clique para configurar ou solte um bot aqui para torná-lo Braço Direito', 'Click to configure or drop an agent here to make it Chief of Staff')}
               >
                 <div className="gov-root-avatar-wrap">
                   {chief?.kind === 'tuca' ? (
@@ -216,7 +302,9 @@ export function GovernancePage(): ReactNode {
                 </div>
                 <div className="gov-root-info">
                   <div className="gov-root-name">{chief ? chief.name : 'Fante'}</div>
-                  <div className="gov-root-subtitle">{L('seu braço direito', 'your chief of staff')}</div>
+                  <div className="gov-root-subtitle">
+                    {dragOverChief ? L('⭐ Solte para definir como Braço Direito', '⭐ Drop to set as Chief of Staff') : L('seu braço direito', 'your chief of staff')}
+                  </div>
                 </div>
               </div>
 
@@ -235,14 +323,35 @@ export function GovernancePage(): ReactNode {
                   {leaderGroups.map((group, idx) => {
                     const dept = getDeptMeta(group.department)
                     const initials = getInitials(group.leaderName)
+                    const isTarget = dragOverLeader === group.leaderName
 
                     return (
-                      <div key={idx} className="gov-leader-column">
+                      <div
+                        key={idx}
+                        className={`gov-leader-column ${isTarget ? 'is-drag-target' : ''}`}
+                        onDragOver={(e) => {
+                          e.preventDefault()
+                          e.dataTransfer.dropEffect = 'move'
+                          if (dragOverLeader !== group.leaderName) setDragOverLeader(group.leaderName)
+                        }}
+                        onDragLeave={(e) => {
+                          if (!e.currentTarget.contains(e.relatedTarget as Node)) {
+                            setDragOverLeader(null)
+                          }
+                        }}
+                        onDrop={(e) => {
+                          e.preventDefault()
+                          handleDropOnLeader(group.leaderName, group.department, group.role)
+                        }}
+                      >
                         {/* Vertical drop line from horizontal crossbar to leader card */}
                         <div className="gov-stem-to-leader" />
 
                         {/* Leader Card */}
-                        <div className="gov-leader-card">
+                        <div
+                          className="gov-leader-card"
+                          style={{ borderColor: isTarget ? dept.color : undefined }}
+                        >
                           <div className="gov-leader-card__top">
                             <div className="gov-initials-badge">
                               <span>{initials}</span>
@@ -256,21 +365,44 @@ export function GovernancePage(): ReactNode {
                             <span className="gov-dept-icon-dot" style={{ backgroundColor: dept.color }} />
                             <span>{dept.name}</span>
                           </div>
+
+                          {isTarget && (
+                            <div className="gov-drop-hint" style={{ color: dept.color }}>
+                              {L('Soltar aqui', 'Drop here')}
+                            </div>
+                          )}
                         </div>
 
                         {/* Stem from Leader to Agents */}
                         <div className="gov-stem-under-leader" />
 
-                        {/* Leaf Agent Cards attached under this leader */}
+                        {/* Leaf Agent Cards attached under this leader (Draggable) */}
                         <div className="gov-agent-leaves-list">
                           {group.agents.map((agent) => {
+                            const isBeingDragged = draggedAgentId === agent.id
+
                             return (
                               <div
                                 key={agent.id}
-                                className="gov-agent-leaf-card"
+                                draggable={true}
+                                onDragStart={(e) => {
+                                  e.dataTransfer.setData('text/plain', agent.id)
+                                  e.dataTransfer.effectAllowed = 'move'
+                                  setDraggedAgentId(agent.id)
+                                }}
+                                onDragEnd={() => {
+                                  setDraggedAgentId(null)
+                                  setDragOverLeader(null)
+                                  setDragOverChief(false)
+                                  setDragOverDept(null)
+                                }}
+                                className={`gov-agent-leaf-card ${isBeingDragged ? 'is-dragging' : ''}`}
                                 onClick={() => setEditingAgent(agent)}
-                                title={L(`Clique para editar governança de ${agent.name}`, `Click to edit ${agent.name} governance`)}
+                                title={L(`Arraste para trocar de líder ou clique para editar ${agent.name}`, `Drag to reassign leader or click to edit ${agent.name}`)}
                               >
+                                <span className="gov-drag-grip" title={L('Arraste para mover de responsável', 'Drag to reassign')}>
+                                  ⋮⋮
+                                </span>
                                 <div className="gov-agent-avatar-wrap">
                                   <AgentAvatar agent={agent} size={28} />
                                 </div>
@@ -311,14 +443,33 @@ export function GovernancePage(): ReactNode {
             )}
           </div>
         ) : (
-          /* "Por grupo" (By Department) View */
+          /* "Por grupo" (By Department) View with Drag and Drop */
           <div className="gov-departments-grid">
             {departmentGroups.map((group, idx) => {
               const dept = getDeptMeta(group.department)
               const leaderList = Array.from(group.leaders)
+              const isTargetDept = dragOverDept === group.department
 
               return (
-                <div key={idx} className="gov-dept-card">
+                <div
+                  key={idx}
+                  className={`gov-dept-card ${isTargetDept ? 'is-drag-target' : ''}`}
+                  style={{ borderColor: isTargetDept ? dept.color : undefined }}
+                  onDragOver={(e) => {
+                    e.preventDefault()
+                    e.dataTransfer.dropEffect = 'move'
+                    setDragOverDept(group.department)
+                  }}
+                  onDragLeave={(e) => {
+                    if (!e.currentTarget.contains(e.relatedTarget as Node)) {
+                      setDragOverDept(null)
+                    }
+                  }}
+                  onDrop={(e) => {
+                    e.preventDefault()
+                    handleDropOnDept(group.department)
+                  }}
+                >
                   <div className="gov-dept-card__header">
                     <div className="gov-dept-badge" style={{ backgroundColor: dept.bgColor, color: dept.color }}>
                       <span className="gov-dept-icon-dot" style={{ backgroundColor: dept.color }} />
@@ -346,9 +497,21 @@ export function GovernancePage(): ReactNode {
                     {group.agents.map((agent) => (
                       <div
                         key={agent.id}
-                        className="gov-dept-agent-row"
+                        draggable={true}
+                        onDragStart={(e) => {
+                          e.dataTransfer.setData('text/plain', agent.id)
+                          e.dataTransfer.effectAllowed = 'move'
+                          setDraggedAgentId(agent.id)
+                        }}
+                        onDragEnd={() => {
+                          setDraggedAgentId(null)
+                          setDragOverDept(null)
+                        }}
+                        className={`gov-dept-agent-row ${draggedAgentId === agent.id ? 'is-dragging' : ''}`}
                         onClick={() => setEditingAgent(agent)}
+                        title={L('Arraste para outro setor ou clique para editar', 'Drag to another area or click to edit')}
                       >
+                        <span className="gov-drag-grip">⋮⋮</span>
                         <AgentAvatar agent={agent} size={28} />
                         <div className="gov-dept-agent-info">
                           <span className="gov-dept-agent-name">{agent.name}</span>
@@ -378,6 +541,14 @@ export function GovernancePage(): ReactNode {
           </div>
         )}
       </div>
+
+      {/* Reactive Drop Toast Notification */}
+      {toastMessage && (
+        <div className="gov-toast">
+          <Icon name="spark" size={15} />
+          <span>{toastMessage}</span>
+        </div>
+      )}
 
       {/* Hierarchy Edit Modal */}
       {editingAgent && (
@@ -614,24 +785,11 @@ function TeamTemplatesModal({
 
   const applyPreset = (): void => {
     if (selectedPreset === 'saas') {
-      // Inspired directly by the user's reference image:
-      // Chief: Fante/Lodi (Braço direito)
-      // Leaders: Amara (Dono) -> Milo (Financeiro)
-      // Sofía (Produto) -> Theo (PM)
-      // Lukas (Engenharia) -> Ada (Dev), Kai (Revisor de código)
-      // Priya (Produto) -> Nina (Pesquisa), Noor (Conteúdo)
-      // Kenji (Admin) -> Atlas (Ops)
-      // Daniel (Engenharia) -> Rio (Triagem de bugs)
-      // Yusuf (Engenharia) -> Sven (Dados)
-      // Chloé (Suporte) -> Iara (Atendimento)
-      // Mateus (Vendas) -> Zara (Vendas)
-
       const fante = agents.find((a) => a.kind === 'tuca' || a.handle === 'fante') ?? agents[0]
       if (fante) {
         patchAgent(fante.id, { isChiefOfStaff: true, role: 'Braço Direito', department: 'Executivo' })
       }
 
-      // Map existing agents by handle or index
       const remaining = agents.filter((a) => a.id !== fante?.id)
       const presetsMapping = [
         { name: 'Theo', role: 'PM', dept: 'Produto', leader: 'Sofía', leadRole: 'Produto' },
@@ -658,7 +816,6 @@ function TeamTemplatesModal({
         })
       })
     } else if (selectedPreset === 'solopreneur') {
-      // 1 Person / Solopreneur structure:
       const fante = agents.find((a) => a.kind === 'tuca' || a.handle === 'fante') ?? agents[0]
       if (fante) {
         patchAgent(fante.id, { isChiefOfStaff: true, role: 'Braço Direito', department: 'Executivo' })
@@ -681,7 +838,6 @@ function TeamTemplatesModal({
         })
       })
     } else {
-      // Agency & Operations:
       const fante = agents.find((a) => a.kind === 'tuca' || a.handle === 'fante') ?? agents[0]
       if (fante) {
         patchAgent(fante.id, { isChiefOfStaff: true, role: 'Braço Direito', department: 'Executivo' })

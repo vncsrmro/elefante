@@ -150,6 +150,53 @@ export function readProjectFile(filePath: string): ProjectFileInfo {
   const st = statSync(normPath)
   const ext = extname(normPath).toLowerCase()
   const name = basename(normPath)
+
+  if (st.isDirectory()) {
+    return {
+      path: normPath,
+      relPath: name,
+      name,
+      content: '',
+      size: 0,
+      isBinary: false,
+      isFolder: true,
+      language: 'folder'
+    }
+  }
+
+  const isImage = /\.(png|jpe?g|gif|webp|svg|ico|bmp)$/i.test(ext)
+  if (isImage) {
+    try {
+      if (ext === '.svg') {
+        const svgText = readFileSync(normPath, 'utf-8')
+        const dataUrl = `data:image/svg+xml;utf8,${encodeURIComponent(svgText)}`
+        return {
+          path: normPath,
+          relPath: name,
+          name,
+          content: dataUrl,
+          size: st.size,
+          isBinary: true,
+          language: 'image'
+        }
+      }
+      const mime = ext === '.png' ? 'image/png' : ext === '.gif' ? 'image/gif' : ext === '.webp' ? 'image/webp' : ext === '.ico' ? 'image/x-icon' : ext === '.bmp' ? 'image/bmp' : 'image/jpeg'
+      const b64 = readFileSync(normPath).toString('base64')
+      const dataUrl = `data:${mime};base64,${b64}`
+      return {
+        path: normPath,
+        relPath: name,
+        name,
+        content: dataUrl,
+        size: st.size,
+        isBinary: true,
+        language: 'image'
+      }
+    } catch {
+      // fallback
+    }
+  }
+
   const isBinary = BINARY_EXTS.has(ext)
 
   if (isBinary) {

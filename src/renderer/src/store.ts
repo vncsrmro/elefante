@@ -84,6 +84,7 @@ export interface State {
   tabs: Record<string, string> // the open tab of each page with tabs, kept while the app is open
   rightPanelOpen: boolean // project explorer & code editor panel on the right
   activeEditorFile?: string | null
+  previousView?: View | null
   demoServer?: { command: string; args: string[] }
 }
 
@@ -134,7 +135,8 @@ let state: State = {
   dialog: null,
   tabs: {},
   rightPanelOpen: false,
-  activeEditorFile: null
+  activeEditorFile: null,
+  previousView: null
 }
 
 // ---------- store plumbing ----------
@@ -321,12 +323,24 @@ export const setNav = (navOpen: boolean): void => set((s) => ({ ...s, navOpen })
 export const navigate = (view: View): void =>
   set((s) => ({
     ...s,
+    previousView: s.view && JSON.stringify(s.view) !== JSON.stringify(view) ? s.view : s.previousView,
     view,
     navOpen: false,
     panel: s.view?.kind === view.kind && JSON.stringify(s.view) === JSON.stringify(view) ? s.panel : null,
     conversations:
       view.kind === 'conversation' ? s.conversations.map((c) => (c.id === view.id ? { ...c, unread: 0 } : c)) : s.conversations
   }))
+
+export const navigateBack = (): void => {
+  const prev = state.previousView
+  if (prev) {
+    navigate(prev)
+  } else {
+    const firstConv = state.conversations[0]
+    if (firstConv) navigate({ kind: 'conversation', id: firstConv.id })
+    else navigate({ kind: 'providers' })
+  }
+}
 
 export function updateSettings(patch: Partial<Omit<Settings, 'engines'>>): void {
   set((s) => withSettings(s, { ...s.settings, ...patch })) // optimistic, so typing stays instant

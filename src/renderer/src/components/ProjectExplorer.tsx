@@ -88,6 +88,12 @@ export function ProjectExplorer({ currentProject }: { currentProject?: string })
 
     try {
       const info: ProjectFileInfo = await call('readProjectFile', { filePath: item.path })
+      if (info.isFolder) {
+        setFolderPath(info.path)
+        setActiveTab('files')
+        void loadFiles(info.path)
+        return
+      }
       const newTab: OpenTab = {
         path: info.path,
         name: info.name,
@@ -467,9 +473,19 @@ export function ProjectExplorer({ currentProject }: { currentProject?: string })
           <div className="editor-body">
             {activeTabItem.isBinary ? (
               <div className="editor-binary-preview">
-                {activeTabItem.name.match(/\.(png|jpe?g|gif|webp|svg)$/i) ? (
+                {activeTabItem.name.match(/\.(png|jpe?g|gif|webp|svg|ico|bmp)$/i) ? (
                   <div className="editor-image-frame">
-                    <img src={`file://${activeTabItem.path.replace(/\\/g, '/')}`} alt={activeTabItem.name} />
+                    <img
+                      src={activeTabItem.content && activeTabItem.content.startsWith('data:') ? activeTabItem.content : `file:///${activeTabItem.path.replace(/\\/g, '/')}`}
+                      alt={activeTabItem.name}
+                    />
+                    <div className="editor-image-meta">
+                      <span>{activeTabItem.name}</span>
+                      <button className="btn btn--xs" onClick={() => openFolderPath(activeTabItem.path)}>
+                        <Icon name="external" size={11} />
+                        <span>{L('Abrir no sistema', 'Open in system')}</span>
+                      </button>
+                    </div>
                   </div>
                 ) : (
                   <div className="editor-binary-note">
