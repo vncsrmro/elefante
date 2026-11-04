@@ -83,6 +83,7 @@ export interface State {
   dialog: Dialog | null // a small window: a channel's members, name or topic; archived agents; new channel; search
   tabs: Record<string, string> // the open tab of each page with tabs, kept while the app is open
   rightPanelOpen: boolean // project explorer & code editor panel on the right
+  rightPanelWidth: number // width in px
   activeEditorFile?: string | null
   previousView?: View | null
   demoServer?: { command: string; args: string[] }
@@ -135,6 +136,7 @@ let state: State = {
   dialog: null,
   tabs: {},
   rightPanelOpen: false,
+  rightPanelWidth: typeof localStorage !== 'undefined' ? Number(localStorage.getItem('elefante:panel-width')) || 560 : 560,
   activeEditorFile: null,
   previousView: null
 }
@@ -481,6 +483,12 @@ export function patchAgent(agentId: string, patch: Partial<Agent>): void {
 export const openPanel = (panel: Panel | null): void => set((s) => ({ ...s, panel }))
 export const toggleRightPanel = (): void => set((s) => ({ ...s, rightPanelOpen: !s.rightPanelOpen }))
 export const setRightPanelOpen = (open: boolean): void => set((s) => ({ ...s, rightPanelOpen: open }))
+export const setRightPanelWidth = (width: number): void => {
+  const clamped = Math.max(300, Math.min(typeof window !== 'undefined' ? window.innerWidth - 260 : 1200, width))
+  if (typeof localStorage !== 'undefined') localStorage.setItem('elefante:panel-width', String(clamped))
+  if (typeof document !== 'undefined') document.documentElement.style.setProperty('--right-panel-width', `${clamped}px`)
+  set((s) => ({ ...s, rightPanelWidth: clamped }))
+}
 export const openFileInEditor = (filePath: string): void => set((s) => ({ ...s, rightPanelOpen: true, activeEditorFile: filePath }))
 export const clearActiveEditorFile = (): void => set((s) => ({ ...s, activeEditorFile: null }))
 export const openDialog = (dialog: Dialog | null): void => set((s) => ({ ...s, dialog, navOpen: dialog ? false : s.navOpen }))

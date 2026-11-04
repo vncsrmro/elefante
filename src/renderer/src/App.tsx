@@ -26,7 +26,14 @@ export function App(): ReactNode {
   const mac = useStore((s) => s.platform === 'mac')
   const navOpen = useStore((s) => s.navOpen)
   const rightPanelOpen = useStore((s) => s.rightPanelOpen)
+  const rightPanelWidth = useStore((s) => s.rightPanelWidth)
   const activeConv = useStore((s) => (view?.kind === 'conversation' ? s.conversations.find((c) => c.id === view.id) : undefined))
+
+  useEffect(() => {
+    if (rightPanelWidth) {
+      document.documentElement.style.setProperty('--right-panel-width', `${rightPanelWidth}px`)
+    }
+  }, [rightPanelWidth])
 
   useEffect(() => {
     document.documentElement.lang = language === 'en' ? 'en' : 'pt-BR'

@@ -45,7 +45,7 @@ import { loginEnv } from './mac'
 import { findLocalSkills } from './local-skills'
 import { detectCloudClis, inspectProjectCliContext } from './cloud-clis'
 import { detectHosts } from './hosts'
-import { listProjectFiles, readProjectFile, writeProjectFile } from './project-files'
+import { listProjectFiles, readProjectFile, writeProjectFile, runProjectCommand } from './project-files'
 import { Routines } from './routines'
 import { Runner } from './runs'
 import { agentFromDraft, availableModels, tucaAgent, tucaHello, tucaInstructions } from './tuca'
@@ -995,6 +995,7 @@ const api: Api = {
   listProjectFiles: ({ folderPath }) => listProjectFiles(folderPath),
   readProjectFile: ({ filePath }) => readProjectFile(filePath),
   writeProjectFile: ({ filePath, content }) => writeProjectFile(filePath, content),
+  runProjectCommand: ({ folderPath, command, shell }) => runProjectCommand(folderPath, command, shell),
   hosts: async () => detectHosts(),
 
   refreshEngines: () => {

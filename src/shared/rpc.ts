@@ -106,6 +106,7 @@ export interface Api {
   listProjectFiles(p: { folderPath: string }): { root: string; name: string; files: ProjectFileItem[] }
   readProjectFile(p: { filePath: string }): ProjectFileInfo
   writeProjectFile(p: { filePath: string; content: string }): { ok: boolean }
+  runProjectCommand(p: { folderPath: string; command: string; shell?: 'powershell' | 'cmd' | 'bash' }): Promise<{ output: string; exitCode: number }>
   hosts(): Promise<HostDiscoveryResult>
 }
 

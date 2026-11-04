@@ -1,21 +1,57 @@
 import { useState, useEffect, useMemo, useRef, type ReactNode } from 'react'
 import { L } from '../../../shared/lang'
 import { call } from '../rpc'
-import { clearActiveEditorFile, openFolderPath, setRightPanelOpen, useStore, type State } from '../store'
+import { clearActiveEditorFile, openFolderPath, setRightPanelOpen, setRightPanelWidth, navigate, useStore } from '../store'
 import { Icon } from './ui'
 import { CodeHighlight } from './CodeHighlight'
 import type { ProjectFileItem, ProjectFileInfo } from '../../../shared/types'
 
-interface OpenTab {
-  path: string
-  name: string
-  relPath: string
-  language: string
-  content: string
-  initialContent: string
-  isDirty: boolean
-  isBinary: boolean
-}
+export type PanelTab =
+  | {
+      id: string
+      kind: 'files'
+      title: string
+    }
+  | {
+      id: string
+      kind: 'file'
+      title: string
+      path: string
+      relPath: string
+      language: string
+      content: string
+      initialContent: string
+      isDirty: boolean
+      isBinary: boolean
+    }
+  | {
+      id: string
+      kind: 'terminal'
+      title: string
+      shell: 'powershell' | 'cmd' | 'bash'
+      history: Array<{ command: string; output: string; exitCode: number; time: string }>
+      currentInput: string
+      commandHistoryList: string[]
+      historyPointer: number
+      isRunning: boolean
+    }
+  | {
+      id: string
+      kind: 'browser'
+      title: string
+      url: string
+      inputUrl: string
+      isMobile?: boolean
+    }
+  | {
+      id: string
+      kind: 'markdown'
+      title: string
+      content: string
+      initialContent: string
+      isDirty: boolean
+      previewMode: boolean
+    }
 
 export function ProjectExplorer({ currentProject }: { currentProject?: string }): ReactNode {
   const [folderPath, setFolderPath] = useState<string>(currentProject || 'D:\\IA LOCAL')
@@ -23,18 +59,39 @@ export function ProjectExplorer({ currentProject }: { currentProject?: string })
   const [files, setFiles] = useState<ProjectFileItem[]>([])
   const [loading, setLoading] = useState<boolean>(false)
   const [error, setError] = useState<string>('')
-  const [search, setSearch] = useState<string>('')
+  const [fileSearch, setFileSearch] = useState<string>('')
   const [expandedFolders, setExpandedFolders] = useState<Set<string>>(new Set())
-  const [activeTab, setActiveTab] = useState<'files' | 'editor'>('files')
-  const [openTabs, setOpenTabs] = useState<OpenTab[]>([])
-  const [activeFileIndex, setActiveFileIndex] = useState<number>(-1)
+
+  // Orca Tabs state
+  const [tabs, setTabs] = useState<PanelTab[]>([
+    { id: 'tab-files', kind: 'files', title: 'Arquivos' }
+  ])
+  const [activeTabId, setActiveTabId] = useState<string>('tab-files')
+  const [isMenuOpen, setIsMenuOpen] = useState<boolean>(false)
+  const [menuSearch, setMenuSearch] = useState<string>('')
+  const [terminalCounter, setTerminalCounter] = useState<number>(1)
+
+  // Editor states for active file tab
+  const [editMode, setEditMode] = useState<boolean>(true)
   const [copyFeedback, setCopyFeedback] = useState<boolean>(false)
   const [saveFeedback, setSaveFeedback] = useState<boolean>(false)
-  const [editMode, setEditMode] = useState<boolean>(true)
+  const [iframeKey, setIframeKey] = useState<number>(0)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
   const gutterRef = useRef<HTMLDivElement>(null)
+  const menuRef = useRef<HTMLDivElement>(null)
+  const menuInputRef = useRef<HTMLInputElement>(null)
+  const terminalBottomRef = useRef<HTMLDivElement>(null)
 
-  // Update folderPath if conversation project changes and has value
+  // Global store
+  const rightPanelWidth = useStore((s) => s.rightPanelWidth)
+  const agents = useStore((s) => s.agents)
+  const conversations = useStore((s) => s.conversations)
+  const activeEditorFile = useStore((s) => s.activeEditorFile)
+
+  // Resizing state
+  const [isResizing, setIsResizing] = useState<boolean>(false)
+
+  // Update folderPath if conversation project changes
   useEffect(() => {
     if (currentProject && currentProject !== folderPath) {
       setFolderPath(currentProject)
@@ -66,7 +123,36 @@ export function ProjectExplorer({ currentProject }: { currentProject?: string })
     if (folderPath) void loadFiles(folderPath)
   }, [folderPath])
 
-  // Toggle folder expand/collapse
+  // Scroll terminal to bottom when new output arrives
+  const activeTab = tabs.find((t) => t.id === activeTabId)
+  useEffect(() => {
+    if (activeTab && activeTab.kind === 'terminal') {
+      terminalBottomRef.current?.scrollIntoView({ behavior: 'smooth' })
+    }
+  }, [activeTab])
+
+  // Close Orca menu when clicking outside
+  useEffect(() => {
+    if (!isMenuOpen) return
+    const handleClickOutside = (e: MouseEvent): void => {
+      if (menuRef.current && !menuRef.current.contains(e.target as Node)) {
+        setIsMenuOpen(false)
+      }
+    }
+    window.addEventListener('mousedown', handleClickOutside)
+    return () => window.removeEventListener('mousedown', handleClickOutside)
+  }, [isMenuOpen])
+
+  // Focus menu input when opened
+  useEffect(() => {
+    if (isMenuOpen) {
+      setTimeout(() => menuInputRef.current?.focus(), 50)
+    } else {
+      setMenuSearch('')
+    }
+  }, [isMenuOpen])
+
+  // Toggle folder expand/collapse in file tree
   const toggleFolder = (dirPath: string): void => {
     setExpandedFolders((prev) => {
       const next = new Set(prev)
@@ -76,12 +162,11 @@ export function ProjectExplorer({ currentProject }: { currentProject?: string })
     })
   }
 
-  // Open file in editor tab directly
+  // Open file in a tab
   const openFile = async (item: ProjectFileItem): Promise<void> => {
-    const existingIndex = openTabs.findIndex((t) => t.path === item.path)
-    if (existingIndex >= 0) {
-      setActiveFileIndex(existingIndex)
-      setActiveTab('editor')
+    const existing = tabs.find((t) => t.kind === 'file' && t.path === item.path)
+    if (existing) {
+      setActiveTabId(existing.id)
       setEditMode(true)
       return
     }
@@ -90,13 +175,17 @@ export function ProjectExplorer({ currentProject }: { currentProject?: string })
       const info: ProjectFileInfo = await call('readProjectFile', { filePath: item.path })
       if (info.isFolder) {
         setFolderPath(info.path)
-        setActiveTab('files')
+        setActiveTabId('tab-files')
         void loadFiles(info.path)
         return
       }
-      const newTab: OpenTab = {
+
+      const newId = `file-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`
+      const newTab: PanelTab = {
+        id: newId,
+        kind: 'file',
+        title: info.name,
         path: info.path,
-        name: info.name,
         relPath: item.relPath || info.relPath,
         language: info.language,
         content: info.content,
@@ -104,20 +193,16 @@ export function ProjectExplorer({ currentProject }: { currentProject?: string })
         isDirty: false,
         isBinary: info.isBinary
       }
-      setOpenTabs((prev) => {
-        const next = [...prev, newTab]
-        setActiveFileIndex(next.length - 1)
-        return next
-      })
-      setActiveTab('editor')
+
+      setTabs((prev) => [...prev, newTab])
+      setActiveTabId(newId)
       setEditMode(true)
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err))
     }
   }
 
-  // Auto-open requested file in editor from global store (e.g. from chat markdown link or IPC)
-  const activeEditorFile = useStore((s) => s.activeEditorFile)
+  // Auto-open requested file in editor from global store
   useEffect(() => {
     if (!activeEditorFile) return
     const path = activeEditorFile
@@ -131,27 +216,213 @@ export function ProjectExplorer({ currentProject }: { currentProject?: string })
   }, [activeEditorFile])
 
   // Close tab
-  const closeTab = (index: number, e?: React.MouseEvent): void => {
+  const closeTab = (tabId: string, e?: React.MouseEvent): void => {
     e?.stopPropagation()
-    const nextTabs = openTabs.filter((_, i) => i !== index)
-    setOpenTabs(nextTabs)
-    if (activeFileIndex >= nextTabs.length) {
-      const newIdx = nextTabs.length - 1
-      setActiveFileIndex(newIdx)
-      if (newIdx < 0) setActiveTab('files')
-    } else if (activeFileIndex === index) {
-      setActiveFileIndex(Math.max(0, index - 1))
+    const targetIdx = tabs.findIndex((t) => t.id === tabId)
+    if (targetIdx < 0) return
+
+    // Never close permanent files tab
+    if (tabs[targetIdx].kind === 'files' && tabs.length === 1) return
+
+    const nextTabs = tabs.filter((t) => t.id !== tabId)
+    setTabs(nextTabs)
+
+    if (activeTabId === tabId) {
+      const newActive = nextTabs[Math.max(0, targetIdx - 1)] || nextTabs[0]
+      if (newActive) setActiveTabId(newActive.id)
+    }
+  }
+
+  // Create new terminal tab
+  const addTerminalTab = (shell: 'powershell' | 'cmd' | 'bash' = 'powershell'): void => {
+    const num = terminalCounter
+    setTerminalCounter((c) => c + 1)
+    const shellLabel = shell === 'powershell' ? 'PowerShell' : shell === 'cmd' ? 'Prompt CMD' : 'Git Bash'
+    const newId = `term-${Date.now()}`
+    const newTab: PanelTab = {
+      id: newId,
+      kind: 'terminal',
+      title: `${shellLabel} ${num}`,
+      shell,
+      history: [
+        {
+          command: `# ${shellLabel} iniciado em ${folderPath}`,
+          output: `Elefante Terminal [Versão 1.0.0]\nDiretório de trabalho: ${folderPath}\nDigite qualquer comando e pressione Enter.\n`,
+          exitCode: 0,
+          time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+        }
+      ],
+      currentInput: '',
+      commandHistoryList: [],
+      historyPointer: -1,
+      isRunning: false
+    }
+
+    setTabs((prev) => [...prev, newTab])
+    setActiveTabId(newId)
+    setIsMenuOpen(false)
+  }
+
+  // Create new browser tab
+  const addBrowserTab = (url: string = 'http://localhost:3000', isMobile: boolean = false): void => {
+    const newId = `browser-${Date.now()}`
+    const newTab: PanelTab = {
+      id: newId,
+      kind: 'browser',
+      title: isMobile ? 'Emulador Móvel' : 'Navegador Web',
+      url,
+      inputUrl: url,
+      isMobile
+    }
+    setTabs((prev) => [...prev, newTab])
+    setActiveTabId(newId)
+    setIsMenuOpen(false)
+  }
+
+  // Create new markdown tab
+  const addMarkdownTab = (): void => {
+    const newId = `md-${Date.now()}`
+    const starterContent = `# Anotações do Projeto\n\n- Data: ${new Date().toLocaleDateString()}\n- Projeto: ${rootName}\n\n## Tarefas\n- [ ] Planejar arquitetura\n- [ ] Validar testes unitários\n- [ ] Deploy e entrega\n`
+    const newTab: PanelTab = {
+      id: newId,
+      kind: 'markdown',
+      title: 'Nota Rápida.md',
+      content: starterContent,
+      initialContent: starterContent,
+      isDirty: false,
+      previewMode: false
+    }
+    setTabs((prev) => [...prev, newTab])
+    setActiveTabId(newId)
+    setIsMenuOpen(false)
+  }
+
+  // Run command in active terminal tab
+  const runCommandInTab = async (tabId: string, cmd: string): Promise<void> => {
+    const trimmed = cmd.trim()
+    if (!trimmed) return
+
+    if (trimmed.toLowerCase() === 'cls' || trimmed.toLowerCase() === 'clear') {
+      setTabs((prev) =>
+        prev.map((t) =>
+          t.id === tabId && t.kind === 'terminal'
+            ? { ...t, history: [], currentInput: '', historyPointer: -1 }
+            : t
+        )
+      )
+      return
+    }
+
+    setTabs((prev) =>
+      prev.map((t) => {
+        if (t.id === tabId && t.kind === 'terminal') {
+          const nextList = [...t.commandHistoryList.filter((c) => c !== trimmed), trimmed]
+          return {
+            ...t,
+            isRunning: true,
+            commandHistoryList: nextList,
+            historyPointer: nextList.length,
+            currentInput: ''
+          }
+        }
+        return t
+      })
+    )
+
+    const tab = tabs.find((t) => t.id === tabId)
+    const shell = tab && tab.kind === 'terminal' ? tab.shell : 'powershell'
+
+    try {
+      const res = await call('runProjectCommand', {
+        folderPath,
+        command: trimmed,
+        shell
+      })
+
+      setTabs((prev) =>
+        prev.map((t) => {
+          if (t.id === tabId && t.kind === 'terminal') {
+            return {
+              ...t,
+              isRunning: false,
+              history: [
+                ...t.history,
+                {
+                  command: trimmed,
+                  output: res.output,
+                  exitCode: res.exitCode,
+                  time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })
+                }
+              ]
+            }
+          }
+          return t
+        })
+      )
+    } catch (err) {
+      setTabs((prev) =>
+        prev.map((t) => {
+          if (t.id === tabId && t.kind === 'terminal') {
+            return {
+              ...t,
+              isRunning: false,
+              history: [
+                ...t.history,
+                {
+                  command: trimmed,
+                  output: err instanceof Error ? err.message : String(err),
+                  exitCode: 1,
+                  time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })
+                }
+              ]
+            }
+          }
+          return t
+        })
+      )
+    }
+  }
+
+  // Handle terminal arrow keys for command history
+  const handleTerminalKeyDown = (
+    e: React.KeyboardEvent<HTMLInputElement>,
+    tab: Extract<PanelTab, { kind: 'terminal' }>
+  ): void => {
+    if (e.key === 'Enter') {
+      e.preventDefault()
+      void runCommandInTab(tab.id, tab.currentInput)
+    } else if (e.key === 'ArrowUp') {
+      e.preventDefault()
+      if (tab.commandHistoryList.length === 0) return
+      const nextPtr = Math.max(0, (tab.historyPointer >= 0 ? tab.historyPointer : tab.commandHistoryList.length) - 1)
+      const cmd = tab.commandHistoryList[nextPtr] || ''
+      setTabs((prev) =>
+        prev.map((t) => (t.id === tab.id && t.kind === 'terminal' ? { ...t, historyPointer: nextPtr, currentInput: cmd } : t))
+      )
+    } else if (e.key === 'ArrowDown') {
+      e.preventDefault()
+      if (tab.historyPointer < 0) return
+      const nextPtr = tab.historyPointer + 1
+      if (nextPtr >= tab.commandHistoryList.length) {
+        setTabs((prev) =>
+          prev.map((t) => (t.id === tab.id && t.kind === 'terminal' ? { ...t, historyPointer: -1, currentInput: '' } : t))
+        )
+      } else {
+        const cmd = tab.commandHistoryList[nextPtr] || ''
+        setTabs((prev) =>
+          prev.map((t) => (t.id === tab.id && t.kind === 'terminal' ? { ...t, historyPointer: nextPtr, currentInput: cmd } : t))
+        )
+      }
     }
   }
 
   // Save current active file
   const saveActiveFile = async (): Promise<void> => {
-    if (activeFileIndex < 0 || !openTabs[activeFileIndex]) return
-    const current = openTabs[activeFileIndex]!
+    if (!activeTab || activeTab.kind !== 'file') return
     try {
-      await call('writeProjectFile', { filePath: current.path, content: current.content })
-      setOpenTabs((prev) =>
-        prev.map((tab, idx) => (idx === activeFileIndex ? { ...tab, initialContent: tab.content, isDirty: false } : tab))
+      await call('writeProjectFile', { filePath: activeTab.path, content: activeTab.content })
+      setTabs((prev) =>
+        prev.map((tab) => (tab.id === activeTab.id && tab.kind === 'file' ? { ...tab, initialContent: tab.content, isDirty: false } : tab))
       )
       setSaveFeedback(true)
       setTimeout(() => setSaveFeedback(false), 2000)
@@ -160,7 +431,7 @@ export function ProjectExplorer({ currentProject }: { currentProject?: string })
     }
   }
 
-  // Handle Tab key indentation inside code editor
+  // Indentation support in Code Editor
   const handleTextareaKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>): void => {
     if (e.key === 'Tab') {
       e.preventDefault()
@@ -169,11 +440,13 @@ export function ProjectExplorer({ currentProject }: { currentProject?: string })
       const end = textarea.selectionEnd
       const val = textarea.value
       const nextVal = val.substring(0, start) + '  ' + val.substring(end)
-      setOpenTabs((prev) =>
-        prev.map((t, i) =>
-          i === activeFileIndex ? { ...t, content: nextVal, isDirty: nextVal !== t.initialContent } : t
+      if (activeTab && activeTab.kind === 'file') {
+        setTabs((prev) =>
+          prev.map((t) =>
+            t.id === activeTab.id && t.kind === 'file' ? { ...t, content: nextVal, isDirty: nextVal !== t.initialContent } : t
+          )
         )
-      )
+      }
       requestAnimationFrame(() => {
         textarea.selectionStart = textarea.selectionEnd = start + 2
       })
@@ -186,49 +459,97 @@ export function ProjectExplorer({ currentProject }: { currentProject?: string })
     }
   }
 
-  // Handle keyboard shortcuts (Ctrl+S to save, Ctrl+W to close active tab, Esc to leave edit mode)
+  // Keyboard Shortcuts (Ctrl+T, Ctrl+Shift+B, Ctrl+Shift+M, Ctrl+S, Ctrl+W)
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent): void => {
       const isMod = e.ctrlKey || e.metaKey
-      if (isMod && e.key.toLowerCase() === 's') {
-        if (activeTab === 'editor' && activeFileIndex >= 0) {
+      if (isMod && e.key.toLowerCase() === 't' && !e.shiftKey) {
+        e.preventDefault()
+        addTerminalTab('powershell')
+      } else if (isMod && e.shiftKey && e.key.toLowerCase() === 'b') {
+        e.preventDefault()
+        addBrowserTab()
+      } else if (isMod && e.shiftKey && e.key.toLowerCase() === 'm') {
+        e.preventDefault()
+        addMarkdownTab()
+      } else if (isMod && e.key.toLowerCase() === 's') {
+        if (activeTab && activeTab.kind === 'file') {
           e.preventDefault()
           void saveActiveFile()
         }
       } else if (isMod && e.key.toLowerCase() === 'w') {
-        if (openTabs.length > 0 && activeFileIndex >= 0) {
+        if (tabs.length > 1) {
           e.preventDefault()
-          e.stopPropagation()
-          closeTab(activeFileIndex)
+          closeTab(activeTabId)
         }
       } else if (e.key === 'Escape') {
-        if (editMode) {
-          e.preventDefault()
+        if (isMenuOpen) {
+          setIsMenuOpen(false)
+        } else if (editMode && activeTab && activeTab.kind === 'file') {
           setEditMode(false)
         }
       }
     }
 
-    const handleNativeCloseTab = (): void => {
-      if (openTabs.length > 0 && activeFileIndex >= 0) {
-        closeTab(activeFileIndex)
-      } else if (openTabs.length === 0) {
-        setRightPanelOpen(false)
-      }
-    }
-
     window.addEventListener('keydown', handleKeyDown, true)
-    window.addEventListener('elefante:close-tab', handleNativeCloseTab)
-    return () => {
-      window.removeEventListener('keydown', handleKeyDown, true)
-      window.removeEventListener('elefante:close-tab', handleNativeCloseTab)
-    }
-  }, [activeTab, activeFileIndex, openTabs, editMode])
+    return () => window.removeEventListener('keydown', handleKeyDown, true)
+  }, [activeTab, activeTabId, tabs, isMenuOpen, editMode])
 
-  // Filter items by search
+  // Drag resizer handler
+  const handleResizerMouseDown = (e: React.MouseEvent): void => {
+    e.preventDefault()
+    setIsResizing(true)
+    document.body.classList.add('is-resizing-panel')
+    const startX = e.clientX
+    const startW = rightPanelWidth
+
+    const onMouseMove = (ev: MouseEvent): void => {
+      const delta = startX - ev.clientX
+      const newW = Math.max(320, Math.min(window.innerWidth - 260, startW + delta))
+      setRightPanelWidth(newW)
+    }
+
+    const onMouseUp = (): void => {
+      setIsResizing(false)
+      document.body.classList.remove('is-resizing-panel')
+      window.removeEventListener('mousemove', onMouseMove)
+      window.removeEventListener('mouseup', onMouseUp)
+    }
+
+    window.addEventListener('mousemove', onMouseMove)
+    window.addEventListener('mouseup', onMouseUp)
+  }
+
+  const handleResizerDoubleClick = (): void => {
+    if (rightPanelWidth < 680) {
+      setRightPanelWidth(880)
+    } else if (rightPanelWidth < 1000) {
+      setRightPanelWidth(Math.min(1280, window.innerWidth - 300))
+    } else {
+      setRightPanelWidth(560)
+    }
+  }
+
+  // Quick Agent Launcher in Orca Menu
+  const openAgentEngine = (engine: 'antigravity' | 'codex' | 'gemini'): void => {
+    const agent = agents.find((a) => a.engine === engine || a.name.toLowerCase().includes(engine))
+    if (agent) {
+      const conv = conversations.find((c) => c.agentId === agent.id)
+      if (conv) {
+        navigate({ kind: 'conversation', id: conv.id })
+      } else {
+        navigate({ kind: 'agent', id: agent.id })
+      }
+    } else {
+      navigate({ kind: 'tuca' })
+    }
+    setIsMenuOpen(false)
+  }
+
+  // Filter files in Explorer view
   const filteredFiles = useMemo(() => {
-    if (!search.trim()) return files
-    const query = search.toLowerCase()
+    if (!fileSearch.trim()) return files
+    const query = fileSearch.toLowerCase()
 
     function filterTree(list: ProjectFileItem[]): ProjectFileItem[] {
       const result: ProjectFileItem[] = []
@@ -249,80 +570,300 @@ export function ProjectExplorer({ currentProject }: { currentProject?: string })
     }
 
     return filterTree(files)
-  }, [files, search])
+  }, [files, fileSearch])
 
-  const activeTabItem = activeFileIndex >= 0 ? openTabs[activeFileIndex] : null
+  // Filter project files inside the Orca + Menu
+  const menuFilteredFiles = useMemo(() => {
+    if (!menuSearch.trim() || menuSearch.length < 2) return []
+    const q = menuSearch.toLowerCase()
+    const found: ProjectFileItem[] = []
+
+    function searchRecursive(items: ProjectFileItem[]): void {
+      for (const it of items) {
+        if (it.kind === 'file' && it.name.toLowerCase().includes(q)) {
+          found.push(it)
+          if (found.length >= 6) return
+        }
+        if (it.kind === 'directory' && it.children) {
+          searchRecursive(it.children)
+          if (found.length >= 6) return
+        }
+      }
+    }
+    searchRecursive(files)
+    return found
+  }, [files, menuSearch])
 
   return (
     <aside className="project-panel">
-      {/* Top Header */}
-      <div className="project-panel__header">
-        <div className="project-panel__title-box">
-          <Icon name="folder" size={15} />
-          <div className="project-panel__title-text" title={folderPath}>
-            <strong>{rootName}</strong>
-            <span className="small muted">{folderPath.split(/[/\\]/).slice(-2).join('/')}</span>
-          </div>
+      {/* Draggable Resizer on the Left Edge */}
+      <div
+        className={`project-panel__resizer ${isResizing ? 'is-active' : ''}`}
+        onMouseDown={handleResizerMouseDown}
+        onDoubleClick={handleResizerDoubleClick}
+        title={L(
+          'Arraste para redimensionar (Duplo clique para alternar largura)',
+          'Drag to resize (Double-click to toggle width)'
+        )}
+      >
+        <div className="project-panel__resizer-handle" />
+      </div>
+
+      {/* Orca-Style Top Tabs Bar */}
+      <div className="orca-tabs-bar">
+        <div className="orca-tabs-list">
+          {tabs.map((tab) => {
+            const isActive = tab.id === activeTabId
+            const isFile = tab.kind === 'file'
+            const isTerminal = tab.kind === 'terminal'
+            const isBrowser = tab.kind === 'browser'
+            const isMarkdown = tab.kind === 'markdown'
+            const isFiles = tab.kind === 'files'
+
+            return (
+              <div
+                key={tab.id}
+                className={`orca-tab ${isActive ? 'is-active' : ''}`}
+                onClick={() => setActiveTabId(tab.id)}
+                title={tab.kind === 'file' ? tab.path : tab.title}
+              >
+                <span className="orca-tab__icon">
+                  {isFiles && <Icon name="folder" size={12} />}
+                  {isFile && <span className="orca-tab__ext">{getFileExtLabel(tab.title)}</span>}
+                  {isTerminal && <Icon name="terminal" size={12} />}
+                  {isBrowser && <Icon name="globe" size={12} />}
+                  {isMarkdown && <Icon name="file" size={12} />}
+                </span>
+                <span className="orca-tab__title">{tab.title}</span>
+                {isFile && tab.isDirty && <span className="orca-tab__dirty-dot" title="Não salvo" />}
+                {isMarkdown && tab.isDirty && <span className="orca-tab__dirty-dot" title="Não salvo" />}
+                {(!isFiles || tabs.length > 1) && (
+                  <button
+                    className="orca-tab__close"
+                    onClick={(e) => closeTab(tab.id, e)}
+                    title={L('Fechar aba (Ctrl+W)', 'Close tab')}
+                  >
+                    <Icon name="x" size={9} />
+                  </button>
+                )}
+              </div>
+            )
+          })}
         </div>
-        <div className="project-panel__header-actions">
+
+        {/* Plus '+' Button for Orca Dropdown Menu */}
+        <div className="orca-tabs-actions">
           <button
-            className="icon-btn icon-btn--sm"
-            title={L('Recarregar arquivos', 'Reload files')}
-            onClick={() => void loadFiles(folderPath)}
+            className={`orca-btn-add ${isMenuOpen ? 'is-active' : ''}`}
+            onClick={() => setIsMenuOpen(!isMenuOpen)}
+            title={L('Nova aba (Ctrl+T)', 'New tab')}
           >
-            <Icon name="refresh" size={13} />
+            <Icon name="plus" size={13} />
           </button>
           <button
-            className="icon-btn icon-btn--sm"
-            title={L('Abrir pasta no Explorer / VS Code', 'Open folder in Explorer / VS Code')}
+            className="orca-btn-action"
+            title={L('Abrir pasta no Explorer / VS Code', 'Open folder')}
             onClick={() => openFolderPath(folderPath)}
           >
-            <Icon name="external" size={13} />
+            <Icon name="external" size={12} />
           </button>
           <button
-            className="icon-btn icon-btn--sm"
+            className="orca-btn-action"
             title={L('Fechar painel (Ctrl+B)', 'Close panel')}
             onClick={() => setRightPanelOpen(false)}
           >
-            <Icon name="x" size={13} />
+            <Icon name="x" size={12} />
           </button>
         </div>
+
+        {/* Orca Floating Menu (matching user reference screenshot) */}
+        {isMenuOpen && (
+          <div ref={menuRef} className="orca-menu-popover">
+            <div className="orca-menu-search">
+              <Icon name="search" size={12} />
+              <input
+                ref={menuInputRef}
+                type="text"
+                placeholder={L(
+                  'Buscar abas abertas, histórico, arquivos, URLs...',
+                  'Search open tabs, history, files, URLs...'
+                )}
+                value={menuSearch}
+                onChange={(e) => setMenuSearch(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') {
+                    if (menuSearch.startsWith('http://') || menuSearch.startsWith('https://') || menuSearch.includes('localhost')) {
+                      addBrowserTab(menuSearch.startsWith('http') ? menuSearch : `http://${menuSearch}`)
+                    } else if (menuFilteredFiles.length > 0) {
+                      void openFile(menuFilteredFiles[0])
+                      setIsMenuOpen(false)
+                    } else {
+                      addTerminalTab('powershell')
+                    }
+                  }
+                }}
+              />
+            </div>
+
+            <div className="orca-menu-content">
+              {/* Filtered Files Results if query matches project files */}
+              {menuFilteredFiles.length > 0 && (
+                <div className="orca-menu-section">
+                  <div className="orca-menu-section-title">{L('Arquivos do Projeto', 'Project Files')}</div>
+                  {menuFilteredFiles.map((f) => (
+                    <div
+                      key={f.path}
+                      className="orca-menu-item"
+                      onClick={() => {
+                        void openFile(f)
+                        setIsMenuOpen(false)
+                      }}
+                    >
+                      <span className="orca-menu-item__icon">
+                        <Icon name="fileCode" size={14} />
+                      </span>
+                      <span className="orca-menu-item__label">{f.name}</span>
+                      <span className="orca-menu-item__shortcut small muted">{f.relPath}</span>
+                    </div>
+                  ))}
+                  <div className="orca-menu-divider" />
+                </div>
+              )}
+
+              {/* Main Actions */}
+              {(!menuSearch || 'powershell terminal'.includes(menuSearch.toLowerCase())) && (
+                <div className="orca-menu-item" onClick={() => addTerminalTab('powershell')}>
+                  <span className="orca-menu-item__icon orca-menu-item__icon--ps">
+                    <Icon name="terminal" size={13} />
+                  </span>
+                  <span className="orca-menu-item__label">Novo Terminal: PowerShell</span>
+                  <span className="orca-menu-item__shortcut">Ctrl+T</span>
+                </div>
+              )}
+
+              {(!menuSearch || 'cmd prompt terminal'.includes(menuSearch.toLowerCase())) && (
+                <div className="orca-menu-item" onClick={() => addTerminalTab('cmd')}>
+                  <span className="orca-menu-item__icon orca-menu-item__icon--cmd">
+                    <Icon name="terminal" size={13} />
+                  </span>
+                  <span className="orca-menu-item__label">Novo Terminal: Prompt CMD</span>
+                </div>
+              )}
+
+              {(!menuSearch || 'git bash terminal'.includes(menuSearch.toLowerCase())) && (
+                <div className="orca-menu-item" onClick={() => addTerminalTab('bash')}>
+                  <span className="orca-menu-item__icon orca-menu-item__icon--bash">
+                    <Icon name="zap" size={13} />
+                  </span>
+                  <span className="orca-menu-item__label">Novo Terminal: Git Bash</span>
+                </div>
+              )}
+
+              {(!menuSearch || 'navegador browser web url'.includes(menuSearch.toLowerCase())) && (
+                <div className="orca-menu-item" onClick={() => addBrowserTab()}>
+                  <span className="orca-menu-item__icon">
+                    <Icon name="globe" size={14} />
+                  </span>
+                  <span className="orca-menu-item__label">Nova Aba do Navegador</span>
+                  <span className="orca-menu-item__shortcut">Ctrl+⇧+B</span>
+                </div>
+              )}
+
+              {(!menuSearch || 'markdown nota texto'.includes(menuSearch.toLowerCase())) && (
+                <div className="orca-menu-item" onClick={() => addMarkdownTab()}>
+                  <span className="orca-menu-item__icon">
+                    <Icon name="file" size={14} />
+                  </span>
+                  <span className="orca-menu-item__label">Novo Markdown</span>
+                  <span className="orca-menu-item__shortcut">Ctrl+⇧+M</span>
+                </div>
+              )}
+
+              {(!menuSearch || 'emulador movel mobile celular'.includes(menuSearch.toLowerCase())) && (
+                <div className="orca-menu-item" onClick={() => addBrowserTab('http://localhost:3000', true)}>
+                  <span className="orca-menu-item__icon">
+                    <Icon name="phone" size={14} />
+                  </span>
+                  <span className="orca-menu-item__label">Novo Emulador Móvel</span>
+                  <span className="orca-menu-item__shortcut muted">Unassigned</span>
+                </div>
+              )}
+
+              <div className="orca-menu-divider" />
+
+              {/* Agents Quick Access */}
+              <div className="orca-menu-item" onClick={() => openAgentEngine('antigravity')}>
+                <span className="orca-menu-item__icon orca-menu-item__icon--antigravity">
+                  <Icon name="spark" size={13} />
+                </span>
+                <span className="orca-menu-item__label">Antigravity</span>
+                <span className="orca-menu-item__chevron">›</span>
+              </div>
+
+              <div className="orca-menu-item" onClick={() => openAgentEngine('codex')}>
+                <span className="orca-menu-item__icon orca-menu-item__icon--codex">
+                  <Icon name="cpu" size={13} />
+                </span>
+                <span className="orca-menu-item__label">Codex</span>
+                <span className="orca-menu-item__chevron">›</span>
+              </div>
+
+              <div className="orca-menu-item" onClick={() => openAgentEngine('gemini')}>
+                <span className="orca-menu-item__icon orca-menu-item__icon--gemini">
+                  <Icon name="bolt" size={13} />
+                </span>
+                <span className="orca-menu-item__label">Gemini</span>
+                <span className="orca-menu-item__chevron">›</span>
+              </div>
+
+              <div className="orca-menu-divider" />
+
+              <div
+                className="orca-menu-item"
+                onClick={() => {
+                  navigate({ kind: 'settings' })
+                  setIsMenuOpen(false)
+                }}
+              >
+                <span className="orca-menu-item__icon">
+                  <Icon name="gear" size={13} />
+                </span>
+                <span className="orca-menu-item__label">Configurações do agente...</span>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
 
-      {/* Tabs Switcher: Arquivos | Editor */}
-      <div className="project-panel__tabs-nav">
-        <button
-          className={`project-panel__tab-btn ${activeTab === 'files' ? 'is-active' : ''}`}
-          onClick={() => setActiveTab('files')}
-        >
-          <Icon name="folder" size={13} />
-          <span>{L('Arquivos', 'Files')}</span>
-        </button>
-        <button
-          className={`project-panel__tab-btn ${activeTab === 'editor' ? 'is-active' : ''}`}
-          onClick={() => {
-            if (openTabs.length > 0) setActiveTab('editor')
-          }}
-          disabled={openTabs.length === 0}
-        >
-          <Icon name="fileCode" size={13} />
-          <span>{L('Editor de Código', 'Code Editor')} {openTabs.length > 0 && `(${openTabs.length})`}</span>
-        </button>
-      </div>
-
-      {/* View 1: File Explorer Tree */}
-      {activeTab === 'files' && (
+      {/* Tab View 1: Project Files Tree */}
+      {activeTab && activeTab.kind === 'files' && (
         <div className="project-panel__files-view">
+          {/* Subheader with folder title & reload */}
+          <div className="project-panel__folder-bar">
+            <div className="project-panel__folder-info">
+              <Icon name="folder" size={14} />
+              <strong title={folderPath}>{rootName}</strong>
+              <span className="small muted">{folderPath.split(/[/\\]/).slice(-2).join('/')}</span>
+            </div>
+            <button
+              className="icon-btn icon-btn--xs"
+              title={L('Recarregar arquivos', 'Reload files')}
+              onClick={() => void loadFiles(folderPath)}
+            >
+              <Icon name="refresh" size={12} />
+            </button>
+          </div>
+
           <div className="project-panel__search-box">
             <Icon name="search" size={12} />
             <input
               type="text"
-              placeholder={L('Encontrar arquivos…', 'Search files…')}
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
+              placeholder={L('Encontrar arquivos no projeto…', 'Search files…')}
+              value={fileSearch}
+              onChange={(e) => setFileSearch(e.target.value)}
             />
-            {search && (
-              <button className="icon-btn icon-btn--xs" onClick={() => setSearch('')}>
+            {fileSearch && (
+              <button className="icon-btn icon-btn--xs" onClick={() => setFileSearch('')}>
                 <Icon name="x" size={10} />
               </button>
             )}
@@ -350,87 +891,68 @@ export function ProjectExplorer({ currentProject }: { currentProject?: string })
                 expandedFolders={expandedFolders}
                 onToggleFolder={toggleFolder}
                 onOpenFile={(item) => void openFile(item)}
-                openPaths={new Set(openTabs.map((t) => t.path))}
+                openPaths={new Set(tabs.filter((t): t is Extract<PanelTab, { kind: 'file' }> => t.kind === 'file').map((t) => t.path))}
               />
             </div>
           )}
         </div>
       )}
 
-      {/* View 2: Code Editor & Open Tabs */}
-      {activeTab === 'editor' && activeTabItem && (
+      {/* Tab View 2: Code / Image File Editor */}
+      {activeTab && activeTab.kind === 'file' && (
         <div className="project-panel__editor-view">
-          {/* Top Tabs list */}
-          <div className="editor-tabs-bar">
-            {openTabs.map((tab, idx) => (
-              <button
-                key={tab.path}
-                className={`editor-tab-item ${idx === activeFileIndex ? 'is-active' : ''} ${tab.isDirty ? 'is-dirty' : ''}`}
-                onClick={() => setActiveFileIndex(idx)}
-                title={tab.relPath}
-              >
-                <span className="editor-tab-item__ext">{getFileExtLabel(tab.name)}</span>
-                <span className="editor-tab-item__name">{tab.name}</span>
-                {tab.isDirty && <span className="editor-tab-item__dot" title={L('Alterações não salvas', 'Unsaved')} />}
-                <span
-                  className="editor-tab-item__close"
-                  onClick={(e) => closeTab(idx, e)}
-                  title={L('Fechar aba', 'Close tab')}
-                >
-                  <Icon name="x" size={10} />
-                </span>
-              </button>
-            ))}
-          </div>
-
           {/* Active File Action Bar */}
           <div className="editor-actions-bar">
-            <div className="editor-actions-bar__path" title={activeTabItem.path}>
-              <code>{activeTabItem.relPath}</code>
-              <span className="tag tag--sm">{activeTabItem.language}</span>
+            <div className="editor-actions-bar__path" title={activeTab.path}>
+              <code>{activeTab.relPath}</code>
+              <span className="tag tag--sm">{activeTab.language}</span>
             </div>
             <div className="editor-actions-bar__buttons">
-              <button
-                className={`btn btn--sm ${editMode ? 'btn--primary' : 'btn--ghost'}`}
-                title={L('Editor Direto com indentação e salvamento', 'Direct Editor mode')}
-                onClick={() => setEditMode(true)}
-              >
-                <Icon name="compose" size={12} />
-                <span>{L('Editor', 'Editor')}</span>
-              </button>
-              <button
-                className={`btn btn--sm ${!editMode ? 'btn--primary' : 'btn--ghost'}`}
-                title={L('Alternar modo de visualização com Syntax Highlighting', 'Toggle syntax preview mode')}
-                onClick={() => setEditMode(false)}
-              >
-                <Icon name="fileCode" size={12} />
-                <span>{L('Syntax Preview', 'Syntax Preview')}</span>
-              </button>
-              <button
-                className="btn btn--sm btn--ghost"
-                title={L('Copiar código', 'Copy code')}
-                onClick={() => {
-                  navigator.clipboard.writeText(activeTabItem.content)
-                  setCopyFeedback(true)
-                  setTimeout(() => setCopyFeedback(false), 1800)
-                }}
-              >
-                <Icon name={copyFeedback ? 'check' : 'copy'} size={12} />
-                <span>{copyFeedback ? L('Copiado!', 'Copied!') : L('Copiar', 'Copy')}</span>
-              </button>
-              <button
-                className={`btn btn--sm ${activeTabItem.isDirty ? 'btn--primary' : 'btn--ghost'}`}
-                title={L('Salvar arquivo (Ctrl+S)', 'Save file (Ctrl+S)')}
-                onClick={() => void saveActiveFile()}
-                disabled={!activeTabItem.isDirty}
-              >
-                <Icon name="save" size={12} />
-                <span>{saveFeedback ? L('Salvo!', 'Saved!') : L('Salvar', 'Save')}</span>
-              </button>
+              {!activeTab.isBinary && (
+                <>
+                  <button
+                    className={`btn btn--sm ${editMode ? 'btn--primary' : 'btn--ghost'}`}
+                    title={L('Editor Direto com indentação e salvamento', 'Direct Editor mode')}
+                    onClick={() => setEditMode(true)}
+                  >
+                    <Icon name="compose" size={12} />
+                    <span>{L('Editor', 'Editor')}</span>
+                  </button>
+                  <button
+                    className={`btn btn--sm ${!editMode ? 'btn--primary' : 'btn--ghost'}`}
+                    title={L('Alternar modo de visualização com Syntax Highlighting', 'Toggle syntax preview mode')}
+                    onClick={() => setEditMode(false)}
+                  >
+                    <Icon name="fileCode" size={12} />
+                    <span>Syntax Preview</span>
+                  </button>
+                  <button
+                    className="btn btn--sm btn--ghost"
+                    title={L('Copiar código', 'Copy code')}
+                    onClick={() => {
+                      navigator.clipboard.writeText(activeTab.content)
+                      setCopyFeedback(true)
+                      setTimeout(() => setCopyFeedback(false), 1800)
+                    }}
+                  >
+                    <Icon name={copyFeedback ? 'check' : 'copy'} size={12} />
+                    <span>{copyFeedback ? L('Copiado!', 'Copied!') : L('Copiar', 'Copy')}</span>
+                  </button>
+                  <button
+                    className={`btn btn--sm ${activeTab.isDirty ? 'btn--primary' : 'btn--ghost'}`}
+                    title={L('Salvar arquivo (Ctrl+S)', 'Save file (Ctrl+S)')}
+                    onClick={() => void saveActiveFile()}
+                    disabled={!activeTab.isDirty}
+                  >
+                    <Icon name="save" size={12} />
+                    <span>{saveFeedback ? L('Salvo!', 'Saved!') : L('Salvar', 'Save')}</span>
+                  </button>
+                </>
+              )}
               <button
                 className="btn btn--sm btn--ghost"
                 title={L('Abrir no VS Code / editor padrão', 'Open in VS Code')}
-                onClick={() => openFolderPath(activeTabItem.path)}
+                onClick={() => openFolderPath(activeTab.path)}
               >
                 <Icon name="external" size={12} />
                 <span>VS Code</span>
@@ -438,50 +960,52 @@ export function ProjectExplorer({ currentProject }: { currentProject?: string })
             </div>
           </div>
 
-          {/* Terminal Window Header */}
+          {/* Terminal-Styled Window Bar */}
           <div className="terminal-header">
             <div className="terminal-dots">
               <span
                 className="terminal-dot terminal-dot--red"
-                onClick={() => closeTab(activeFileIndex)}
-                title={L('Fechar aba (Ctrl+W)', 'Close tab (Ctrl+W)')}
+                onClick={() => closeTab(activeTab.id)}
+                title={L('Fechar aba (Ctrl+W)', 'Close tab')}
               />
               <span
                 className="terminal-dot terminal-dot--yellow"
                 onClick={() => setEditMode(!editMode)}
-                title={L('Alternar modo (Editor / Syntax Preview)', 'Toggle mode (Editor / Syntax Preview)')}
+                title={L('Alternar modo', 'Toggle mode')}
               />
               <span
                 className="terminal-dot terminal-dot--green"
                 onClick={() => void saveActiveFile()}
-                title={L('Salvar arquivo (Ctrl+S)', 'Save file (Ctrl+S)')}
+                title={L('Salvar arquivo (Ctrl+S)', 'Save file')}
               />
             </div>
             <div className="terminal-title">
-              <Icon name="terminal" size={11} />
-              <span>{activeTabItem.name}</span>
-              {activeTabItem.isDirty && (
-                <span className="terminal-dirty-tag">● {L('não salvo', 'unsaved')}</span>
-              )}
+              <Icon name="fileCode" size={11} />
+              <span>{activeTab.title}</span>
+              {activeTab.isDirty && <span className="terminal-dirty-tag">● {L('não salvo', 'unsaved')}</span>}
             </div>
             <span className="terminal-badge">
-              {editMode ? L('EDITOR ATIVO', 'ACTIVE EDITOR') : L('SYNTAX PREVIEW', 'SYNTAX PREVIEW')}
+              {activeTab.isBinary ? 'MÍDIA / BINÁRIO' : editMode ? 'EDITOR ATIVO' : 'SYNTAX PREVIEW'}
             </span>
           </div>
 
-          {/* Code Content View */}
+          {/* Content Body */}
           <div className="editor-body">
-            {activeTabItem.isBinary ? (
+            {activeTab.isBinary ? (
               <div className="editor-binary-preview">
-                {activeTabItem.name.match(/\.(png|jpe?g|gif|webp|svg|ico|bmp)$/i) ? (
+                {activeTab.title.match(/\.(png|jpe?g|gif|webp|svg|ico|bmp)$/i) ? (
                   <div className="editor-image-frame">
                     <img
-                      src={activeTabItem.content && activeTabItem.content.startsWith('data:') ? activeTabItem.content : `file:///${activeTabItem.path.replace(/\\/g, '/')}`}
-                      alt={activeTabItem.name}
+                      src={
+                        activeTab.content && activeTab.content.startsWith('data:')
+                          ? activeTab.content
+                          : `file:///${activeTab.path.replace(/\\/g, '/')}`
+                      }
+                      alt={activeTab.title}
                     />
                     <div className="editor-image-meta">
-                      <span>{activeTabItem.name}</span>
-                      <button className="btn btn--xs" onClick={() => openFolderPath(activeTabItem.path)}>
+                      <span>{activeTab.title}</span>
+                      <button className="btn btn--xs" onClick={() => openFolderPath(activeTab.path)}>
                         <Icon name="external" size={11} />
                         <span>{L('Abrir no sistema', 'Open in system')}</span>
                       </button>
@@ -491,7 +1015,7 @@ export function ProjectExplorer({ currentProject }: { currentProject?: string })
                   <div className="editor-binary-note">
                     <Icon name="file" size={32} />
                     <p>{L('Arquivo binário.', 'Binary file.')}</p>
-                    <button className="btn btn--sm" onClick={() => openFolderPath(activeTabItem.path)}>
+                    <button className="btn btn--sm" onClick={() => openFolderPath(activeTab.path)}>
                       {L('Abrir com aplicativo padrão', 'Open with default app')}
                     </button>
                   </div>
@@ -499,20 +1023,16 @@ export function ProjectExplorer({ currentProject }: { currentProject?: string })
               </div>
             ) : !editMode ? (
               <div className="terminal-view-wrapper">
-                <CodeHighlight
-                  code={activeTabItem.content}
-                  language={activeTabItem.language}
-                  onDoubleClick={() => setEditMode(true)}
-                />
+                <CodeHighlight code={activeTab.content} language={activeTab.language} onDoubleClick={() => setEditMode(true)} />
                 <div className="terminal-hint-bar">
-                  <span>{L('Syntax Highlighting Preview. Clique em Editor ou dê duplo clique para editar.', 'Syntax Highlighting Preview. Double click to edit.')}</span>
-                  <span>{activeTabItem.content.split('\n').length} {L('linhas', 'lines')}</span>
+                  <span>{L('Duplo clique para editar diretamente.', 'Double click to edit.')}</span>
+                  <span>{activeTab.content.split('\n').length} {L('linhas', 'lines')}</span>
                 </div>
               </div>
             ) : (
               <div className="code-editor-container code-editor-container--terminal">
                 <div ref={gutterRef} className="code-editor-gutter">
-                  {activeTabItem.content.split('\n').map((_, i) => (
+                  {activeTab.content.split('\n').map((_, i) => (
                     <span key={i} className="gutter-num">
                       {i + 1}
                     </span>
@@ -521,14 +1041,14 @@ export function ProjectExplorer({ currentProject }: { currentProject?: string })
                 <textarea
                   ref={textareaRef}
                   className="code-editor-textarea code-editor-textarea--terminal"
-                  value={activeTabItem.content}
+                  value={activeTab.content}
                   onScroll={handleScroll}
                   onKeyDown={handleTextareaKeyDown}
                   onChange={(e) => {
                     const newContent = e.target.value
-                    setOpenTabs((prev) =>
-                      prev.map((t, i) =>
-                        i === activeFileIndex
+                    setTabs((prev) =>
+                      prev.map((t) =>
+                        t.id === activeTab.id && t.kind === 'file'
                           ? { ...t, content: newContent, isDirty: newContent !== t.initialContent }
                           : t
                       )
@@ -542,17 +1062,304 @@ export function ProjectExplorer({ currentProject }: { currentProject?: string })
             )}
           </div>
 
-          {/* Terminal Editor Bottom Status Bar */}
-          <div className="editor-status-bar">
-            <div className="editor-status-bar__left">
-              <span>UTF-8</span>
-              <span>{activeTabItem.language.toUpperCase()}</span>
-              <span>{activeTabItem.content.split('\n').length} {L('linhas', 'lines')}</span>
-              <span>{activeTabItem.content.length} {L('caracteres', 'chars')}</span>
+          {/* Bottom Status Bar */}
+          {!activeTab.isBinary && (
+            <div className="editor-status-bar">
+              <div className="editor-status-bar__left">
+                <span>UTF-8</span>
+                <span>{activeTab.language.toUpperCase()}</span>
+                <span>{activeTab.content.split('\n').length} {L('linhas', 'lines')}</span>
+                <span>{activeTab.content.length} {L('caracteres', 'chars')}</span>
+              </div>
+              <div className="editor-status-bar__right">
+                <span>Ctrl+S: Salvar · Ctrl+W: Fechar · Esc: Visualizar</span>
+              </div>
             </div>
-            <div className="editor-status-bar__right">
-              <span>Ctrl+S: {L('Salvar', 'Save')} · Ctrl+W: {L('Fechar', 'Close')} · Esc: {L('Visualizar', 'View')}</span>
+          )}
+        </div>
+      )}
+
+      {/* Tab View 3: Integrated Interactive Terminal */}
+      {activeTab && activeTab.kind === 'terminal' && (
+        <div className="terminal-tab-view">
+          {/* Terminal Tab Bar / Header */}
+          <div className="terminal-tab-header">
+            <div className="terminal-tab-header__left">
+              <span className={`terminal-tab-status-dot ${activeTab.isRunning ? 'is-running' : 'is-ready'}`} />
+              <strong>{activeTab.title}</strong>
+              <span className="terminal-tab-cwd muted" title={folderPath}>
+                {folderPath}
+              </span>
             </div>
+            <div className="terminal-tab-header__actions">
+              <button
+                className="btn btn--xs btn--ghost"
+                title={L('Limpar tela (cls)', 'Clear screen')}
+                onClick={() =>
+                  setTabs((prev) =>
+                    prev.map((t) => (t.id === activeTab.id && t.kind === 'terminal' ? { ...t, history: [] } : t))
+                  )
+                }
+              >
+                Limpar
+              </button>
+              <button
+                className="btn btn--xs btn--ghost"
+                title={L('Executar comando no VS Code / Terminal Externo', 'External')}
+                onClick={() => openFolderPath(folderPath)}
+              >
+                <Icon name="external" size={11} />
+                <span>Externo</span>
+              </button>
+            </div>
+          </div>
+
+          {/* Terminal Console Stream Body */}
+          <div className="terminal-console-body">
+            {activeTab.history.map((h, i) => (
+              <div key={i} className="terminal-log-entry">
+                <div className="terminal-log-cmd">
+                  <span className="terminal-log-prompt">
+                    {activeTab.shell === 'powershell' ? 'PS' : activeTab.shell === 'cmd' ? 'CMD' : 'BASH'}&gt;
+                  </span>
+                  <span className="terminal-log-cmd-text">{h.command}</span>
+                  <span className={`terminal-log-exit ${h.exitCode === 0 ? 'is-ok' : 'is-err'}`}>
+                    {h.exitCode === 0 ? '✓' : `err ${h.exitCode}`}
+                  </span>
+                  <span className="terminal-log-time">{h.time}</span>
+                </div>
+                {h.output && <pre className="terminal-log-output">{h.output}</pre>}
+              </div>
+            ))}
+            {activeTab.isRunning && (
+              <div className="terminal-log-entry is-running">
+                <span className="spinner spinner--sm" /> {L('Executando comando…', 'Running command…')}
+              </div>
+            )}
+            <div ref={terminalBottomRef} />
+          </div>
+
+          {/* Terminal Input Bar */}
+          <div className="terminal-input-bar">
+            <span className="terminal-input-prompt">
+              {activeTab.shell === 'powershell' ? 'PS' : activeTab.shell === 'cmd' ? 'CMD' : 'BASH'}&gt;
+            </span>
+            <input
+              type="text"
+              className="terminal-input-field"
+              placeholder={L('Digite um comando (ex: npm run dev, git status, dir)...', 'Type a command...')}
+              value={activeTab.currentInput}
+              disabled={activeTab.isRunning}
+              onChange={(e) => {
+                const val = e.target.value
+                setTabs((prev) =>
+                  prev.map((t) => (t.id === activeTab.id && t.kind === 'terminal' ? { ...t, currentInput: val } : t))
+                )
+              }}
+              onKeyDown={(e) => handleTerminalKeyDown(e, activeTab)}
+              autoFocus
+            />
+            <button
+              className="btn btn--xs btn--primary"
+              disabled={activeTab.isRunning || !activeTab.currentInput.trim()}
+              onClick={() => void runCommandInTab(activeTab.id, activeTab.currentInput)}
+            >
+              <Icon name="play" size={11} />
+            </button>
+          </div>
+
+          {/* Quick Terminal Chips */}
+          <div className="terminal-quick-chips">
+            <span className="small muted">Atalhos:</span>
+            {['npm run dev', 'git status', 'dir', 'npm test', 'cls'].map((chip) => (
+              <button
+                key={chip}
+                className="chip-btn"
+                onClick={() => void runCommandInTab(activeTab.id, chip)}
+                disabled={activeTab.isRunning}
+              >
+                {chip}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Tab View 4: Integrated Web Browser / Mobile Emulator */}
+      {activeTab && activeTab.kind === 'browser' && (
+        <div className={`browser-tab-view ${activeTab.isMobile ? 'is-mobile-view' : ''}`}>
+          {/* Browser Navigation Bar */}
+          <div className="browser-nav-bar">
+            <div className="browser-nav-actions">
+              <button
+                className="icon-btn icon-btn--xs"
+                title={L('Recarregar página', 'Reload')}
+                onClick={() => setIframeKey((k) => k + 1)}
+              >
+                <Icon name="refresh" size={12} />
+              </button>
+            </div>
+
+            <div className="browser-address-bar">
+              <Icon name="globe" size={12} />
+              <input
+                type="text"
+                value={activeTab.inputUrl}
+                placeholder="http://localhost:3000"
+                onChange={(e) => {
+                  const val = e.target.value
+                  setTabs((prev) =>
+                    prev.map((t) => (t.id === activeTab.id && t.kind === 'browser' ? { ...t, inputUrl: val } : t))
+                  )
+                }}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') {
+                    let formatted = activeTab.inputUrl.trim()
+                    if (!formatted.startsWith('http://') && !formatted.startsWith('https://')) {
+                      formatted = `http://${formatted}`
+                    }
+                    setTabs((prev) =>
+                      prev.map((t) =>
+                        t.id === activeTab.id && t.kind === 'browser'
+                          ? { ...t, url: formatted, inputUrl: formatted }
+                          : t
+                      )
+                    )
+                    setIframeKey((k) => k + 1)
+                  }
+                }}
+              />
+            </div>
+
+            <div className="browser-external-actions">
+              <button
+                className="btn btn--xs btn--ghost"
+                title={L('Abrir no navegador padrão do sistema', 'Open in system browser')}
+                onClick={() => void call('openExternal', { url: activeTab.url })}
+              >
+                <Icon name="external" size={12} />
+                <span>Navegador</span>
+              </button>
+            </div>
+          </div>
+
+          {/* Quick Presets Bar */}
+          <div className="browser-presets-bar">
+            <span className="small muted">Locais:</span>
+            {['http://localhost:3000', 'http://localhost:5173', 'http://localhost:8080', 'http://localhost:4000'].map(
+              (preset) => (
+                <button
+                  key={preset}
+                  className={`chip-btn ${activeTab.url === preset ? 'is-active' : ''}`}
+                  onClick={() => {
+                    setTabs((prev) =>
+                      prev.map((t) =>
+                        t.id === activeTab.id && t.kind === 'browser'
+                          ? { ...t, url: preset, inputUrl: preset }
+                          : t
+                      )
+                    )
+                    setIframeKey((k) => k + 1)
+                  }}
+                >
+                  {preset.replace('http://', '')}
+                </button>
+              )
+            )}
+          </div>
+
+          {/* Frame Container */}
+          <div className="browser-frame-container">
+            {activeTab.isMobile ? (
+              <div className="mobile-emulator-chassis">
+                <div className="mobile-emulator-island" />
+                <iframe
+                  key={iframeKey}
+                  src={activeTab.url}
+                  className="mobile-emulator-iframe"
+                  title="Mobile Preview"
+                  sandbox="allow-scripts allow-same-origin allow-forms allow-popups"
+                />
+              </div>
+            ) : (
+              <iframe
+                key={iframeKey}
+                src={activeTab.url}
+                className="browser-desktop-iframe"
+                title="Browser Preview"
+                sandbox="allow-scripts allow-same-origin allow-forms allow-popups"
+              />
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* Tab View 5: Markdown Scratchpad */}
+      {activeTab && activeTab.kind === 'markdown' && (
+        <div className="markdown-tab-view">
+          <div className="markdown-tab-header">
+            <div className="markdown-tab-title">
+              <Icon name="file" size={13} />
+              <span>{activeTab.title}</span>
+              {activeTab.isDirty && <span className="terminal-dirty-tag">● {L('não salvo', 'unsaved')}</span>}
+            </div>
+            <div className="markdown-tab-actions">
+              <button
+                className={`btn btn--xs ${!activeTab.previewMode ? 'btn--primary' : 'btn--ghost'}`}
+                onClick={() =>
+                  setTabs((prev) =>
+                    prev.map((t) => (t.id === activeTab.id && t.kind === 'markdown' ? { ...t, previewMode: false } : t))
+                  )
+                }
+              >
+                Editar
+              </button>
+              <button
+                className={`btn btn--xs ${activeTab.previewMode ? 'btn--primary' : 'btn--ghost'}`}
+                onClick={() =>
+                  setTabs((prev) =>
+                    prev.map((t) => (t.id === activeTab.id && t.kind === 'markdown' ? { ...t, previewMode: true } : t))
+                  )
+                }
+              >
+                Visualizar
+              </button>
+              <button
+                className="btn btn--xs btn--ghost"
+                onClick={() => {
+                  navigator.clipboard.writeText(activeTab.content)
+                  alert('Conteúdo copiado!')
+                }}
+              >
+                <Icon name="copy" size={11} />
+                <span>Copiar</span>
+              </button>
+            </div>
+          </div>
+
+          <div className="markdown-tab-body">
+            {activeTab.previewMode ? (
+              <div className="markdown-preview-pane">
+                <CodeHighlight code={activeTab.content} language="markdown" />
+              </div>
+            ) : (
+              <textarea
+                className="markdown-textarea"
+                value={activeTab.content}
+                onChange={(e) => {
+                  const val = e.target.value
+                  setTabs((prev) =>
+                    prev.map((t) =>
+                      t.id === activeTab.id && t.kind === 'markdown'
+                        ? { ...t, content: val, isDirty: val !== t.initialContent }
+                        : t
+                    )
+                  )
+                }}
+                placeholder="# Escreva em Markdown..."
+                spellCheck={false}
+              />
+            )}
           </div>
         </div>
       )}

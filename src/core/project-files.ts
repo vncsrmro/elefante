@@ -1,5 +1,6 @@
 import { existsSync, readdirSync, statSync, readFileSync, writeFileSync } from 'node:fs'
 import { join, resolve, basename, extname, relative } from 'node:path'
+import { exec } from 'node:child_process'
 import type { ProjectFileItem, ProjectFileInfo } from '../shared/types'
 
 const IGNORED_DIRS = new Set([
@@ -241,4 +242,35 @@ export function writeProjectFile(filePath: string, content: string): { ok: boole
   const normPath = resolve(filePath)
   writeFileSync(normPath, content, 'utf-8')
   return { ok: true }
+}
+
+export function runProjectCommand(
+  folderPath: string,
+  command: string,
+  shell: 'powershell' | 'cmd' | 'bash' = 'powershell'
+): Promise<{ output: string; exitCode: number }> {
+  return new Promise((resolvePromise) => {
+    const cwd = existsSync(folderPath) ? folderPath : process.cwd()
+    let shellExec: string | undefined = undefined
+    if (process.platform === 'win32') {
+      if (shell === 'cmd') {
+        shellExec = process.env['ComSpec'] || 'cmd.exe'
+      } else if (shell === 'bash') {
+        shellExec = 'bash.exe'
+      } else {
+        shellExec = 'powershell.exe'
+      }
+    } else {
+      shellExec = shell === 'bash' ? '/bin/bash' : undefined
+    }
+
+    exec(command, { cwd, shell: shellExec, timeout: 60_000, maxBuffer: 1024 * 1024, env: process.env }, (err, stdout, stderr) => {
+      const out = [stdout, stderr].filter(Boolean).join('\n').trim()
+      const exitCode = err && typeof err.code === 'number' ? err.code : (err ? 1 : 0)
+      resolvePromise({
+        output: out || (err ? err.message : '(Comando concluído com sucesso)'),
+        exitCode
+      })
+    })
+  })
 }
