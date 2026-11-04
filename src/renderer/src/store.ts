@@ -54,6 +54,7 @@ export type View =
   | { kind: 'routines' }
   | { kind: 'skills' }
   | { kind: 'report' }
+  | { kind: 'governance'; focusAgentId?: string }
   | { kind: 'providers' }
   | { kind: 'clis' }
   | { kind: 'settings' }
@@ -402,6 +403,7 @@ export const ensureTuca = (modelId?: string, fresh = false): Promise<{ agentId: 
 export const createFromDraft = (messageId: string): Promise<{ agentId: string; conversationId: string }> => call('createFromDraft', { messageId })
 // The builder screen, in place of the app; closing it comes back here.
 export const openTuca = (): void => navigate({ kind: 'tuca', from: state.view?.kind === 'tuca' ? state.view.from : (state.view ?? undefined) })
+export const openGovernance = (focusAgentId?: string): void => navigate({ kind: 'governance', focusAgentId })
 export const settleDraft = (messageId: string, agentId?: string): void => void call('settleDraft', { messageId, agentId })
 
 export async function openDm(agentId: string): Promise<void> {

@@ -124,6 +124,7 @@ export function Sidebar(): ReactNode {
   const agentMenu = (agentId: string, agentName: string): MenuItem[] => [
     { label: L('Mandar mensagem', 'Send a message'), icon: 'send', onClick: () => void openDm(agentId) },
     { label: L('Configurar agente', 'Configure agent'), icon: 'edit', onClick: () => navigate({ kind: 'agent', id: agentId }) },
+    { label: L('Governança & Hierarquia', 'Governance & Hierarchy'), icon: 'sitemap', onClick: () => navigate({ kind: 'governance', focusAgentId: agentId }) },
     'separator',
     {
       label: L('Arquivar…', 'Archive…'),
@@ -193,6 +194,7 @@ export function Sidebar(): ReactNode {
             <span className="nav-item__meta">{L('criar agente', 'new agent')}</span>
           </button>
           <NavItem view={{ kind: 'approvals' }} icon="shield" label={L('Aprovações', 'Approvals')} badge={pending} />
+          <NavItem view={{ kind: 'governance' }} icon="sitemap" label={L('Governança (Hierarquia)', 'Governance (Hierarchy)')} />
           <NavItem view={{ kind: 'memory' }} icon="book" label={L('Memória', 'Memory')} badge={suggestions} />
           <NavItem view={{ kind: 'routines' }} icon="clock" label={L('Rotinas', 'Routines')} />
           <NavItem view={{ kind: 'skills' }} icon="layers" label="Skills" badge={proposals} />
@@ -233,6 +235,13 @@ export function Sidebar(): ReactNode {
           <div className="section__head section__head--clickable" onClick={() => setShowAgents(!showAgents)}>
             <span>{L('Time de Agentes', 'Agent Team')}</span>
             <div className="row row--center" style={{ gap: 2 }} onClick={(e) => e.stopPropagation()}>
+              <button
+                className="icon-btn icon-btn--sm"
+                title={L('Governança & Hierarquia ("Quem cuida de quem")', 'Governance & Hierarchy ("Who manages who")')}
+                onClick={() => navigate({ kind: 'governance' })}
+              >
+                <Icon name="sitemap" size={13} />
+              </button>
               <button className="icon-btn icon-btn--sm" title={L('Criar novo agente com o Fante', 'Create new agent with Fante')} onClick={openTuca}>
                 <Icon name="plus" size={13} />
               </button>

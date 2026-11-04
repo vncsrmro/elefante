@@ -11,6 +11,7 @@ import { MemoryPage } from './components/Memory'
 import { RoutinesPage } from './components/Routines'
 import { SkillsPage } from './components/Skills'
 import { ReportPage } from './components/Report'
+import { GovernancePage } from './components/Governance'
 import { Onboarding } from './components/Onboarding'
 import { Dialogs } from './components/Dialogs'
 import { Icon } from './components/ui'
@@ -107,6 +108,7 @@ export function App(): ReactNode {
         {view.kind === 'routines' && <RoutinesPage />}
         {view.kind === 'skills' && <SkillsPage />}
         {view.kind === 'report' && <ReportPage />}
+        {view.kind === 'governance' && <GovernancePage />}
         {view.kind === 'providers' && <ProvidersPage />}
         {view.kind === 'clis' && <CloudClisPage />}
         {view.kind === 'settings' && <SettingsPage />}

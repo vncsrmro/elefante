@@ -79,6 +79,11 @@ export interface Agent {
   folders?: LentFolder[] // Mac folders lent to that computer (spec §13, M5.1); changed only through lendFolder/folderAction
   archived: boolean
   kind?: 'tuca' // the agent that builds the others: it proposes, the person creates
+  reportsTo?: string // Agent ID or leader name this bot reports to
+  department?: string // Department / sector (e.g., 'Engenharia', 'Produto', 'Vendas', 'Suporte', 'Financeiro', 'Admin', 'Operações')
+  responsible?: string // Responsible human/leader name (e.g. 'Amara', 'Sofía', 'Lukas', 'Priya', 'Kenji', 'Daniel', 'Yusuf', 'Chloé', 'Mateus')
+  responsibleRole?: string // Role of responsible person (e.g. 'Dono', 'Produto', 'Engenharia', 'Admin', 'Suporte', 'Vendas')
+  isChiefOfStaff?: boolean // True if this agent is the "Braço Direito" (Chief of Staff / Co-pilot) at the root of the org tree
 }
 
 // One of the person's apps given to an agent, by the name the system shows.
@@ -186,6 +191,11 @@ export interface AgentDraft {
   reason?: string
   state?: 'created' | 'dismissed'
   agentId?: string // once created
+  reportsTo?: string
+  department?: string
+  responsible?: string
+  responsibleRole?: string
+  isChiefOfStaff?: boolean
 }
 
 export type Author = { kind: 'me' } | { kind: 'agent'; id: string } | { kind: 'system' } | { kind: 'routine'; id: string }

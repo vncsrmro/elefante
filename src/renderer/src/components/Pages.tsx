@@ -281,6 +281,46 @@ export function AgentPage({ id, draft: proposed, fromMessage }: { id?: string; d
           )}
 
           {pane('perfil') && (
+            <Card title={L('Governança & Hierarquia ("Quem cuida de quem")', 'Governance & Hierarchy ("Who manages who")')} lead={L('Defina a quem este agente responde e em qual setor ele atua para manter a autonomia da empresa.', 'Define who this agent reports to and which area they work in.')}>
+              <div className="grid2">
+                <Field label={L('Pessoa Responsável (Líder)', 'Responsible Person (Leader)')} hint={L('Quem cuida deste bot (ex.: Amara, Lukas, Você…)', 'Who manages this bot (e.g. Amara, Lukas, You…)')}>
+                  <input
+                    value={draft.responsible ?? ''}
+                    placeholder={L('Ex.: Amara, Lukas, Você…', 'E.g. Amara, Lukas, Founder…')}
+                    onChange={(e) => patch({ responsible: e.target.value })}
+                  />
+                </Field>
+                <Field label={L('Departamento / Setor', 'Department / Area')}>
+                  <input
+                    value={draft.department ?? ''}
+                    placeholder={L('Ex.: Engenharia, Produto, Vendas, Suporte…', 'E.g. Engineering, Product, Sales, Support…')}
+                    onChange={(e) => patch({ department: e.target.value })}
+                  />
+                </Field>
+              </div>
+              <div className="grid2" style={{ marginTop: 12 }}>
+                <Field label={L('Papel do Responsável', 'Leader Role')}>
+                  <input
+                    value={draft.responsibleRole ?? ''}
+                    placeholder={L('Ex.: Dono, Engenharia, Produto, Admin…', 'E.g. Owner, Engineering, Product, Admin…')}
+                    onChange={(e) => patch({ responsibleRole: e.target.value })}
+                  />
+                </Field>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 10, paddingTop: 20 }}>
+                  <label className="check" style={{ cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 8 }}>
+                    <input
+                      type="checkbox"
+                      checked={!!draft.isChiefOfStaff}
+                      onChange={(e) => patch({ isChiefOfStaff: e.target.checked })}
+                    />
+                    <span>⭐ {L('Braço Direito (Chief of Staff)', 'Chief of Staff')}</span>
+                  </label>
+                </div>
+              </div>
+            </Card>
+          )}
+
+          {pane('perfil') && (
             <Card title={L('Instruções', 'Instructions')} lead={L('Escreva como escreveria pra um colega novo: o que fazer, o que evitar, quando perguntar.', 'Write it as you would for a new colleague: what to do, what to avoid, when to ask.')}>
               <textarea
                 rows={6}

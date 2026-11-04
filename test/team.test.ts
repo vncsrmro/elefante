@@ -46,6 +46,36 @@ describe('the team as a file', () => {
     expect(existsSync(file)).toBe(true)
     expect(new Db(file).agents()[0]!.handle).toBe('staff')
   })
+
+  it('saves and loads agent hierarchy and governance data', () => {
+    const db = fresh()
+    db.saveAgent(
+      agent('milo', 'milo', {
+        role: 'Financeiro',
+        department: 'Financeiro',
+        responsible: 'Amara',
+        responsibleRole: 'Dono',
+        isChiefOfStaff: false
+      })
+    )
+    db.saveAgent(
+      agent('lodi', 'lodi', {
+        role: 'Braço Direito',
+        department: 'Executivo',
+        responsible: 'Amara',
+        responsibleRole: 'Dono',
+        isChiefOfStaff: true
+      })
+    )
+    const milo = db.agent('milo')!
+    expect(milo.department).toBe('Financeiro')
+    expect(milo.responsible).toBe('Amara')
+    expect(milo.responsibleRole).toBe('Dono')
+    expect(milo.isChiefOfStaff).toBe(false)
+
+    const lodi = db.agent('lodi')!
+    expect(lodi.isChiefOfStaff).toBe(true)
+  })
 })
 
 describe('the report', () => {

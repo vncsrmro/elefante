@@ -177,6 +177,15 @@ const PATHS: Record<string, ReactNode> = {
       <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6" />
       <path d="M15 3h6v6M10 14 21 3" />
     </>
+  ),
+  sitemap: (
+    <>
+      <rect x="9" y="3" width="6" height="5" rx="1" />
+      <rect x="2" y="16" width="6" height="5" rx="1" />
+      <rect x="9" y="16" width="6" height="5" rx="1" />
+      <rect x="16" y="16" width="6" height="5" rx="1" />
+      <path d="M12 8v3M5 16v-2a3 3 0 0 1 3-3h8a3 3 0 0 1 3 3v2M12 11v5" />
+    </>
   )
 }
 
