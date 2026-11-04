@@ -261,7 +261,7 @@ export function runProjectCommand(
         shellExec = 'powershell.exe'
       }
     } else {
-      shellExec = shell === 'bash' ? '/bin/bash' : undefined
+      shellExec = shell === 'bash' ? '/bin/bash' : (process.env['SHELL'] || '/bin/sh')
     }
 
     exec(command, { cwd, shell: shellExec, timeout: 60_000, maxBuffer: 1024 * 1024, env: process.env }, (err, stdout, stderr) => {

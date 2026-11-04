@@ -54,8 +54,8 @@ export type PanelTab =
     }
 
 export function ProjectExplorer({ currentProject }: { currentProject?: string }): ReactNode {
-  const [folderPath, setFolderPath] = useState<string>(currentProject || 'D:\\IA LOCAL')
-  const [rootName, setRootName] = useState<string>('IA LOCAL')
+  const [folderPath, setFolderPath] = useState<string>(currentProject || '')
+  const [rootName, setRootName] = useState<string>('Projeto')
   const [files, setFiles] = useState<ProjectFileItem[]>([])
   const [loading, setLoading] = useState<boolean>(false)
   const [error, setError] = useState<string>('')
@@ -86,6 +86,7 @@ export function ProjectExplorer({ currentProject }: { currentProject?: string })
   const rightPanelWidth = useStore((s) => s.rightPanelWidth)
   const agents = useStore((s) => s.agents)
   const conversations = useStore((s) => s.conversations)
+  const models = useStore((s) => s.models)
   const activeEditorFile = useStore((s) => s.activeEditorFile)
 
   // Resizing state
@@ -103,7 +104,8 @@ export function ProjectExplorer({ currentProject }: { currentProject?: string })
     setLoading(true)
     setError('')
     try {
-      const res = await call('listProjectFiles', { folderPath: path })
+      const res = await call('listProjectFiles', { folderPath: path || '.' })
+      setFolderPath(res.root)
       setRootName(res.name)
       setFiles(res.files)
       // Auto-expand first level directories
@@ -221,8 +223,11 @@ export function ProjectExplorer({ currentProject }: { currentProject?: string })
     const targetIdx = tabs.findIndex((t) => t.id === tabId)
     if (targetIdx < 0) return
 
+    const target = tabs[targetIdx]
+    if (!target) return
+
     // Never close permanent files tab
-    if (tabs[targetIdx].kind === 'files' && tabs.length === 1) return
+    if (target.kind === 'files' && tabs.length === 1) return
 
     const nextTabs = tabs.filter((t) => t.id !== tabId)
     setTabs(nextTabs)
@@ -532,9 +537,10 @@ export function ProjectExplorer({ currentProject }: { currentProject?: string })
 
   // Quick Agent Launcher in Orca Menu
   const openAgentEngine = (engine: 'antigravity' | 'codex' | 'gemini'): void => {
-    const agent = agents.find((a) => a.engine === engine || a.name.toLowerCase().includes(engine))
+    const engineModelIds = new Set(models.filter((m) => m.engine === engine).map((m) => m.id))
+    const agent = agents.find((a) => engineModelIds.has(a.modelId) || a.name.toLowerCase().includes(engine))
     if (agent) {
-      const conv = conversations.find((c) => c.agentId === agent.id)
+      const conv = conversations.find((c) => (c.kind === 'dm' && c.name === agent.id) || c.members.includes(agent.id))
       if (conv) {
         navigate({ kind: 'conversation', id: conv.id })
       } else {
@@ -694,7 +700,7 @@ export function ProjectExplorer({ currentProject }: { currentProject?: string })
                   if (e.key === 'Enter') {
                     if (menuSearch.startsWith('http://') || menuSearch.startsWith('https://') || menuSearch.includes('localhost')) {
                       addBrowserTab(menuSearch.startsWith('http') ? menuSearch : `http://${menuSearch}`)
-                    } else if (menuFilteredFiles.length > 0) {
+                    } else if (menuFilteredFiles.length > 0 && menuFilteredFiles[0]) {
                       void openFile(menuFilteredFiles[0])
                       setIsMenuOpen(false)
                     } else {
