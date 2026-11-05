@@ -17,6 +17,7 @@ import {
   pendingMemories,
   pickConversationProject,
   shortcut,
+  toggleInboxOpen,
   updateSettings,
   useStore,
   type Conversation,
@@ -148,12 +149,19 @@ export function Sidebar(): ReactNode {
         <span className="orca-header__title">{L('Projetos', 'Projects')}</span>
         <div className="orca-header__actions">
           <button
-            className={`orca-icon-btn ${pending > 0 ? 'has-alert' : ''}`}
-            title={L('Aprovações e notificações', 'Approvals and notifications')}
-            onClick={() => navigate({ kind: 'approvals' })}
+            className={`orca-icon-btn ${pending > 0 ? 'has-alert' : ''} ${s.inboxOpen ? 'is-on' : ''}`}
+            title={L('One inbox (Aprovações e o que espera por você)', 'One inbox (Approvals and waiting on you)')}
+            onClick={toggleInboxOpen}
           >
             <Icon name="bell" size={14} />
             {totalAlerts > 0 && <span className="orca-alert-count">{totalAlerts}</span>}
+          </button>
+          <button
+            className={`orca-icon-btn ${same(s.view, { kind: 'board' }) ? 'is-on' : ''}`}
+            title={L('Quadro de Tarefas dos Agentes (Kanban)', 'Agents Task Board (Kanban)')}
+            onClick={() => navigate({ kind: 'board' })}
+          >
+            <Icon name="board" size={14} />
           </button>
           <button
             className={`orca-icon-btn ${showTools ? 'is-on' : ''}`}
@@ -194,6 +202,7 @@ export function Sidebar(): ReactNode {
             <span className="nav-item__meta">{L('criar agente', 'new agent')}</span>
           </button>
           <NavItem view={{ kind: 'approvals' }} icon="shield" label={L('Aprovações', 'Approvals')} badge={pending} />
+          <NavItem view={{ kind: 'board' }} icon="board" label={L('Quadro de Tarefas', 'Task Board')} badge={s.tasks.filter((t) => t.status === 'in_progress').length || undefined} />
           <NavItem view={{ kind: 'governance' }} icon="sitemap" label={L('Governança (Hierarquia)', 'Governance (Hierarchy)')} />
           <NavItem view={{ kind: 'memory' }} icon="book" label={L('Memória', 'Memory')} badge={suggestions} />
           <NavItem view={{ kind: 'routines' }} icon="clock" label={L('Rotinas', 'Routines')} />

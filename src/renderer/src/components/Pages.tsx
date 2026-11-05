@@ -60,6 +60,7 @@ import { AppsCard } from './Apps'
 import { ApprovalCard } from './Conversation'
 import { AgentAvatar, Icon, NumberInput, SleepingElephant, time, tokens, UsageBar } from './ui'
 import { UpdateSettings } from './Update'
+import { OneInboxContent } from './OneInbox'
 
 export function Page({ title, subtitle, actions, children }: { title: ReactNode; subtitle?: ReactNode; actions?: ReactNode; children: ReactNode }): ReactNode {
   return (
@@ -884,51 +885,10 @@ export function Field({ label, hint, error, children }: { label: string; hint?: 
 // ---------- Approvals ----------
 
 export function ApprovalsPage(): ReactNode {
-  const approvals = useStore((s) => s.approvals)
-  const pending = approvals.filter((a) => a.state === 'pending')
-  const past = approvals.filter((a) => a.state !== 'pending').sort((a, b) => (b.decidedAt ?? 0) - (a.decidedAt ?? 0))
-  const conversations = useStore((s) => s.conversations)
-
   return (
-    <Page title={L('Aprovações', 'Approvals')} subtitle={L('Nada sensível acontece sem você. Cada aprovação cobre uma ação exata.', 'Nothing sensitive happens without you. Each approval covers one exact action.')}>
-      {pending.length === 0 ? (
-        <div className="empty empty--rest">
-          <SleepingElephant />
-          <p>{L('Nada esperando por você.', 'Nothing waiting for you.')}</p>
-          <p className="muted">{L('Quando um agente quiser mergear, fazer deploy, apagar ou enviar algo pra fora, o pedido aparece aqui e na conversa.', 'When an agent wants to merge, deploy, delete or send something out, the request shows up here and in the conversation.')}</p>
-        </div>
-      ) : (
-        <div className="stack-list">
-          {pending.map((a) => {
-            const conv = conversations.find((c) => c.id === a.conversationId)
-            return (
-              <div key={a.id}>
-                <div className="row row--between small muted list-meta">
-                  <span>
-                    {L('em', 'in')} {conv?.kind === 'channel' ? `#${conv.name}` : 'DM'} · {time(a.createdAt)}
-                  </span>
-                  <button className="link" onClick={() => navigate({ kind: 'conversation', id: a.conversationId })}>
-                    {L('Ver na conversa', 'See in the conversation')}
-                  </button>
-                </div>
-                <ApprovalCard approval={a} />
-              </div>
-            )
-          })}
-        </div>
-      )}
-
-      {past.length > 0 && (
-        <>
-          <h3 className="section-title">{L('Histórico', 'History')}</h3>
-          <div className="table">
-            {past.map((a) => (
-              <HistoryRow key={a.id} id={a.id} />
-            ))}
-          </div>
-        </>
-      )}
-    </Page>
+    <div className="page page--inbox" style={{ maxWidth: 780, margin: '0 auto', padding: '24px 20px', width: '100%', height: '100%', overflowY: 'auto' }}>
+      <OneInboxContent />
+    </div>
   )
 }
 

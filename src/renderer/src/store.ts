@@ -31,6 +31,9 @@ import {
   type Skill,
   type SkillInput,
   type SkillVersion,
+  type Task,
+  type TaskInput,
+  type TaskStatus,
   type Report,
   type UsageReport,
   type Trigger,
@@ -58,6 +61,7 @@ export type View =
   | { kind: 'providers' }
   | { kind: 'clis' }
   | { kind: 'settings' }
+  | { kind: 'board'; conversationId?: string } // every project's tasks, or one's
 
 export interface State {
   ready: boolean
@@ -77,6 +81,9 @@ export interface State {
   browsers: BrowserView[]
   routines: Routine[]
   skills: Skill[]
+  tasks: Task[]
+  taskOpen: string | null // the card open in the task drawer
+  inboxOpen: boolean // the "waiting on you" popover
   platform: Os
   packaged: boolean
   panel: Panel | null // the side panel next to a conversation
@@ -130,6 +137,9 @@ let state: State = {
   browsers: [],
   routines: [],
   skills: [],
+  tasks: [],
+  taskOpen: null,
+  inboxOpen: false,
   platform: 'mac',
   packaged: false,
   panel: null,
@@ -265,6 +275,10 @@ function apply(e: CoreEvent): void {
         return { ...s, skills: upsert(s.skills, e.skill).sort((a, b) => a.name.localeCompare(b.name)) }
       case 'skill_removed':
         return { ...s, skills: s.skills.filter((k) => k.id !== e.id) }
+      case 'task':
+        return { ...s, tasks: upsert(s.tasks, e.task).sort((a, b) => a.number - b.number) }
+      case 'task_removed':
+        return { ...s, tasks: s.tasks.filter((t) => t.id !== e.id), taskOpen: s.taskOpen === e.id ? null : s.taskOpen }
     }
   })
 }
@@ -296,6 +310,7 @@ export async function start(): Promise<void> {
       browsers: snap.browsers,
       routines: snap.routines,
       skills: snap.skills,
+      tasks: snap.tasks ?? [],
       platform: snap.platform,
       packaged: snap.packaged,
       demoServer: snap.demoServer
@@ -565,3 +580,25 @@ export async function lendFolder(agentId: string): Promise<string | null> {
 }
 
 export const folderAction = (agentId: string, name: string, action: 'read_only' | 'read_write' | 'return'): void => void call('folderAction', { agentId, name, action })
+
+// ---------- task & board actions ----------
+export const saveTask = (task: TaskInput): Promise<Task> => call('saveTask', { task })
+export const moveTask = (id: string, status: TaskStatus): void => {
+  set((s) => ({
+    ...s,
+    tasks: s.tasks.map((t) => (t.id === id ? { ...t, status, updatedAt: Date.now() } : t))
+  }))
+  void call('moveTask', { id, status })
+}
+export const startTask = (id: string): void => void call('startTask', { id })
+export const removeTask = (id: string): void => {
+  set((s) => ({
+    ...s,
+    tasks: s.tasks.filter((t) => t.id !== id),
+    taskOpen: s.taskOpen === id ? null : s.taskOpen
+  }))
+  void call('removeTask', { id })
+}
+export const setTaskOpen = (taskOpen: string | null): void => set((s) => ({ ...s, taskOpen }))
+export const setInboxOpen = (inboxOpen: boolean): void => set((s) => ({ ...s, inboxOpen }))
+export const toggleInboxOpen = (): void => set((s) => ({ ...s, inboxOpen: !s.inboxOpen }))

@@ -1,5 +1,5 @@
 // The contract between the renderer and the core, carried over a MessagePort.
-import type { Os, Agent, ApiProviderId, BrowserInput, Approval, Artifact, ImageUpload, BrowserView, CloudCliId, CloudCliInfo, ComputerInfo, Connector, ConnectorInput, ConnectorTool, HarnessMcp, Conversation, EngineId, HostDiscoveryResult, Memory, MemoryCategory, MemoryScope, Message, ProjectCliContext, ProjectFileItem, ProjectFileInfo, Routine, RoutineInput, Report, Settings, LocalSkill, Skill, SkillInput, SkillVersion, Trigger, UsageReport } from './types'
+import type { Os, Agent, ApiProviderId, BrowserInput, Approval, Artifact, ImageUpload, BrowserView, CloudCliId, CloudCliInfo, ComputerInfo, Connector, ConnectorInput, ConnectorTool, HarnessMcp, Conversation, EngineId, HostDiscoveryResult, Memory, MemoryCategory, MemoryScope, Message, ProjectCliContext, ProjectFileItem, ProjectFileInfo, Routine, RoutineInput, Report, Settings, LocalSkill, Skill, SkillInput, SkillVersion, Task, TaskInput, TaskStatus, Trigger, UsageReport } from './types'
 
 export interface Snapshot {
   settings: Settings
@@ -14,6 +14,7 @@ export interface Snapshot {
   browsers: BrowserView[]
   routines: Routine[]
   skills: Skill[]
+  tasks: Task[]
   platform: Os
   packaged: boolean // installed app, not `npm run dev` (opening at login only works there)
   demoServer?: { command: string; args: string[] } // the bundled demo connector, when available
@@ -108,6 +109,10 @@ export interface Api {
   writeProjectFile(p: { filePath: string; content: string }): { ok: boolean }
   runProjectCommand(p: { folderPath: string; command: string; shell?: 'powershell' | 'cmd' | 'bash' }): Promise<{ output: string; exitCode: number }>
   hosts(): Promise<HostDiscoveryResult>
+  saveTask(p: { task: TaskInput }): Task // creates or edits a card; throws a message for the form
+  moveTask(p: { id: string; status: TaskStatus }): void // dragged to another column
+  startTask(p: { id: string }): void // posts it to its project for its agent, and links the reply
+  removeTask(p: { id: string }): void
 }
 
 export type Method = keyof Api
@@ -133,6 +138,8 @@ export type CoreEvent =
   | { type: 'conversation_removed'; id: string }
   | { type: 'skill'; skill: Skill }
   | { type: 'skill_removed'; id: string }
+  | { type: 'task'; task: Task }
+  | { type: 'task_removed'; id: string }
 
 export type Request = { id: number; method: Method; params: unknown }
 export type Response = { id: number; result?: unknown; error?: string }

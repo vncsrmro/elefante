@@ -186,6 +186,30 @@ const PATHS: Record<string, ReactNode> = {
       <rect x="16" y="16" width="6" height="5" rx="1" />
       <path d="M12 8v3M5 16v-2a3 3 0 0 1 3-3h8a3 3 0 0 1 3 3v2M12 11v5" />
     </>
+  ),
+  flag: (
+    <>
+      <path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z" />
+      <line x1="4" y1="22" x2="4" y2="15" />
+    </>
+  ),
+  board: (
+    <>
+      <rect x="3" y="3" width="18" height="18" rx="2" />
+      <path d="M8 7v10M13 7v6M18 7v8" />
+    </>
+  ),
+  columns: (
+    <>
+      <rect x="3" y="3" width="7" height="18" rx="1.5" />
+      <rect x="14" y="3" width="7" height="18" rx="1.5" />
+    </>
+  ),
+  circleDot: (
+    <>
+      <circle cx="12" cy="12" r="9" />
+      <circle cx="12" cy="12" r="3" />
+    </>
   )
 }
 

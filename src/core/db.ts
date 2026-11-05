@@ -1,5 +1,5 @@
 import { DatabaseSync } from 'node:sqlite'
-import { CACHE_READ_WEIGHT, type Agent, type AgentApp, type AgentColor, type Approval, type ApprovalState, type Artifact, type ArtifactKind, type Author, type Connector, type ConnectorAuth, type ConnectorTool, type Conversation, type Effort, type LentFolder, type Memory, type MemoryCategory, type MemoryMode, type MemoryState, type Message, type Receipt, type Routine, type RoutineRun, type Run, type Settings, type Skill, type SkillVersion, type ToolClass, type Trigger } from '../shared/types'
+import { CACHE_READ_WEIGHT, type Agent, type AgentApp, type AgentColor, type Approval, type ApprovalState, type Artifact, type ArtifactKind, type Author, type Connector, type ConnectorAuth, type ConnectorTool, type Conversation, type Effort, type LentFolder, type Memory, type MemoryCategory, type MemoryMode, type MemoryState, type Message, type Receipt, type Routine, type RoutineRun, type Run, type Settings, type Skill, type SkillVersion, type Task, type ToolClass, type Trigger } from '../shared/types'
 
 // Each entry runs once, in order; PRAGMA user_version records how far we got.
 const MIGRATIONS = [
@@ -231,6 +231,18 @@ const MIGRATIONS = [
   ALTER TABLE agents ADD COLUMN responsible TEXT;
   ALTER TABLE agents ADD COLUMN responsible_role TEXT;
   ALTER TABLE agents ADD COLUMN is_chief INTEGER NOT NULL DEFAULT 0;
+  `,
+  `
+  CREATE TABLE tasks (
+    id TEXT PRIMARY KEY,
+    number INTEGER NOT NULL,
+    conversation_id TEXT NOT NULL,
+    message_id TEXT,
+    data TEXT NOT NULL,
+    updated_at INTEGER NOT NULL
+  );
+  CREATE INDEX tasks_by_conversation ON tasks (conversation_id);
+  CREATE INDEX tasks_by_message ON tasks (message_id);
   `
 ]
 
@@ -241,6 +253,16 @@ const COUNTED = `input_tokens - cache_read_tokens * ${1 - CACHE_READ_WEIGHT} + o
 const str = (v: unknown): string => (typeof v === 'string' ? v : '')
 
 export const monthStart = (now = new Date()): number => new Date(now.getFullYear(), now.getMonth(), 1).getTime()
+
+// Times the steps and the plan of a reply as they first show up, so the mission
+// timeline can replay them. Steps keep `at` across updates (they're spread).
+export function stampRun(run: Run, now = Date.now()): void {
+  for (const s of run.steps) if (s.at === undefined) s.at = now
+  for (const t of run.todos ?? []) {
+    if (t.status !== 'pending' && t.startedAt === undefined) t.startedAt = now
+    if ((t.status === 'done' || t.status === 'cancelled') && t.doneAt === undefined) t.doneAt = now
+  }
+}
 
 export class Db {
   private db: DatabaseSync
@@ -465,6 +487,7 @@ export class Db {
 
   // Its messages and members go with it (foreign keys).
   deleteConversation(id: string): void {
+    this.db.prepare('DELETE FROM tasks WHERE conversation_id = ?').run(id)
     this.db.prepare('DELETE FROM conversations WHERE id = ?').run(id)
   }
 
@@ -528,6 +551,7 @@ export class Db {
   }
 
   saveMessage(m: Message): void {
+    if (m.run) stampRun(m.run)
     this.db
       .prepare(
         `INSERT INTO messages (id, conversation_id, author_kind, author_id, text, at, run, routine) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
@@ -857,6 +881,40 @@ export class Db {
   removeServices(agentId: string, name?: string): void {
     if (name) this.db.prepare('DELETE FROM services WHERE agent_id = ? AND name = ?').run(agentId, name)
     else this.db.prepare('DELETE FROM services WHERE agent_id = ?').run(agentId)
+  }
+
+  // ---------- tasks ----------
+
+  tasks(): Task[] {
+    return (this.db.prepare('SELECT data FROM tasks ORDER BY number').all() as Row[]).map((r) => JSON.parse(str(r['data'])) as Task)
+  }
+
+  task(id: string): Task | undefined {
+    const r = this.db.prepare('SELECT data FROM tasks WHERE id = ?').get(id) as Row | undefined
+    return r ? (JSON.parse(str(r['data'])) as Task) : undefined
+  }
+
+  taskOfMessage(messageId: string): Task | undefined {
+    const r = this.db.prepare('SELECT data FROM tasks WHERE message_id = ?').get(messageId) as Row | undefined
+    return r ? (JSON.parse(str(r['data'])) as Task) : undefined
+  }
+
+  nextTaskNumber(): number {
+    const r = this.db.prepare('SELECT MAX(number) AS n FROM tasks').get() as Row | undefined
+    return Number(r?.['n'] ?? 0) + 1
+  }
+
+  saveTask(t: Task): void {
+    this.db
+      .prepare(
+        `INSERT INTO tasks (id, number, conversation_id, message_id, data, updated_at) VALUES (?, ?, ?, ?, ?, ?)
+         ON CONFLICT (id) DO UPDATE SET conversation_id = excluded.conversation_id, message_id = excluded.message_id, data = excluded.data, updated_at = excluded.updated_at`
+      )
+      .run(t.id, t.number, t.conversationId, t.messageId ?? null, JSON.stringify(t), t.updatedAt)
+  }
+
+  removeTask(id: string): void {
+    this.db.prepare('DELETE FROM tasks WHERE id = ?').run(id)
   }
 
   // ---------- routines ----------

@@ -50,6 +50,8 @@ import { AgentAvatar, Icon, MeAvatar, duration, time, tokens, usd } from './ui'
 import { ArtifactCard, BrowserCard, ServiceCard, SidePanel } from './Panel'
 import { when } from './Routines'
 import { AgentProposal } from './Tuca'
+import { MissionHub } from './MissionHub'
+import { KanbanBoard } from './KanbanBoard'
 
 export function ConversationView({ id }: { id: string }): ReactNode {
   const conv = useStore((s) => s.conversations.find((c) => c.id === id))
@@ -67,6 +69,8 @@ export function ConversationView({ id }: { id: string }): ReactNode {
   const cavemanMode = useStore((s) => s.settings.cavemanMode ?? 'lite')
   const rightPanelOpen = useStore((s) => s.rightPanelOpen)
   const [showSummary, setShowSummary] = useState(false)
+  const [viewMode, setViewMode] = useState<'chat' | 'board'>('chat')
+  const projectTasksCount = useStore((s) => s.tasks.filter((t) => t.conversationId === id).length)
   const [cliBadges, setCliBadges] = useState<{ cliId: string; label: string; detail: string }[]>([])
 
   useEffect(() => {
@@ -98,6 +102,25 @@ export function ConversationView({ id }: { id: string }): ReactNode {
           <div className="topbar__title">
             {dmAgent ? <AgentAvatar agent={dmAgent} size={20} /> : <Icon name={conv.project ? 'folder' : 'hash'} size={15} />}
             <h1>{title}</h1>
+            <div className="topbar__view-toggle">
+              <button
+                className={`view-toggle-btn ${viewMode === 'chat' ? 'is-active' : ''}`}
+                onClick={() => setViewMode('chat')}
+                title={L('Ver conversa no chat', 'View chat conversation')}
+              >
+                <Icon name="spark" size={12} />
+                <span>{L('Chat', 'Chat')}</span>
+              </button>
+              <button
+                className={`view-toggle-btn ${viewMode === 'board' ? 'is-active' : ''}`}
+                onClick={() => setViewMode('board')}
+                title={L('Ver quadro de tarefas (Kanban)', 'View task board (Kanban)')}
+              >
+                <Icon name="board" size={12} />
+                <span>{L('Tarefas', 'Tasks')}</span>
+                {projectTasksCount > 0 && <span className="view-toggle-count">{projectTasksCount}</span>}
+              </button>
+            </div>
             {dmAgent && <span className="tag">{dmAgent.role}</span>}
             {conv.project ? (
               <>
@@ -193,8 +216,16 @@ export function ConversationView({ id }: { id: string }): ReactNode {
 
         {showSummary && <SummaryPanel conv={conv} messages={messages} onClose={() => setShowSummary(false)} />}
 
-        <MessageList messages={messages} conversationId={id} empty={conv.kind === 'channel' && members.length === 0} focus={focus} />
-        <Composer conversationId={id} members={members} placeholder={dmAgent ? L(`Mensagem para ${dmAgent.name}`, `Message ${dmAgent.name}`) : L(`Mensagem em #${title}`, `Message #${title}`)} />
+        {viewMode === 'board' ? (
+          <div style={{ flex: 1, minHeight: 0, display: 'flex' }}>
+            <KanbanBoard conversationId={id} onClose={() => setViewMode('chat')} />
+          </div>
+        ) : (
+          <>
+            <MessageList messages={messages} conversationId={id} empty={conv.kind === 'channel' && members.length === 0} focus={focus} />
+            <Composer conversationId={id} members={members} placeholder={dmAgent ? L(`Mensagem para ${dmAgent.name}`, `Message ${dmAgent.name}`) : L(`Mensagem em #${title}`, `Message #${title}`)} />
+          </>
+        )}
       </section>
       <SidePanel />
     </div>
@@ -328,7 +359,7 @@ function MessageRow({ message, grouped }: { message: Message; grouped: boolean }
             <span className="msg__time">{time(message.at)}</span>
           </div>
         )}
-        {message.run?.todos && message.run.todos.length > 0 && <RunTodos todos={message.run.todos} />}
+        {message.run?.todos && message.run.todos.length > 0 && <MissionHub message={message} todos={message.run.todos} />}
         {message.run && <RunSteps message={message} />}
         {message.text ? (
           <div className="md">

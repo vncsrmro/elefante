@@ -138,6 +138,7 @@ export interface Step {
   ms?: number
   output?: string // live or completed terminal stdout/stderr, service logs
   command?: string // raw command for terminal steps
+  at?: number // when the step started (stamped when the message is saved); drives the mission timeline
 }
 
 export type TodoStatus = 'pending' | 'in_progress' | 'done' | 'cancelled'
@@ -145,6 +146,57 @@ export interface TodoItem {
   id: string
   title: string
   status: TodoStatus
+  startedAt?: number // first seen in progress (or done, if it skipped that)
+  doneAt?: number // first seen done or cancelled
+}
+
+// ---------- tasks (the board) ----------
+// A piece of work on the board of a project. It moves on its own: when an agent
+// works on it the card goes to "in progress", waiting on you puts it "in review",
+// and a finished reply puts it in "done". People can drag it anywhere too.
+export type TaskStatus = 'todo' | 'in_progress' | 'review' | 'done'
+export const TASK_STATUSES: TaskStatus[] = ['todo', 'in_progress', 'review', 'done']
+
+export interface Task {
+  id: string
+  number: number // #12, unique in the workspace
+  conversationId: string
+  title: string
+  description?: string
+  agentId?: string // who works on it; without one, whoever the router picks
+  status: TaskStatus
+  source: 'manual' | 'auto' // created on the board, or from an agent's plan
+  messageId?: string // the agent reply working on it
+  waiting?: 'approval' | 'input' | 'budget' // why it's in review: it waits on you
+  blocked?: string // the reply failed or was stopped; starting it again retries
+  pendingStart?: boolean // started: the next reply of its agent here is linked to it
+  runStatus?: RunStatus // the linked reply's state last time it moved the card; a drag holds until it changes
+  dismissed?: boolean // removed from the board (kept in the core so its reply doesn't recreate it)
+  createdAt: number
+  updatedAt: number
+  startedAt?: number
+  doneAt?: number
+}
+
+export type TaskInput = Pick<Task, 'conversationId' | 'title'> & Partial<Pick<Task, 'id' | 'description' | 'agentId' | 'status'>>
+
+// Where a reply's state puts its task on the board.
+export function taskStatusOf(run: Pick<Run, 'status'>): { status: TaskStatus; waiting?: Task['waiting']; blocked?: boolean } {
+  switch (run.status) {
+    case 'working':
+      return { status: 'in_progress' }
+    case 'waiting_approval':
+      return { status: 'review', waiting: 'approval' }
+    case 'waiting_input':
+      return { status: 'review', waiting: 'input' }
+    case 'paused':
+    case 'limit_reached':
+      return { status: 'review', waiting: 'budget' }
+    case 'done':
+      return { status: 'done' }
+    default: // failed, stopped, interrupted
+      return { status: 'todo', blocked: true }
+  }
 }
 
 export interface Receipt {

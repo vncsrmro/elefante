@@ -131,9 +131,9 @@ describe('gerenciar_tarefas (To-Do List)', () => {
     const run = msgs[0]?.run
     expect(run?.todos).toBeDefined()
     expect(run?.todos).toHaveLength(3)
-    expect(run?.todos?.[0]).toEqual({ id: '1', title: 'Ler documentação', status: 'done' })
-    expect(run?.todos?.[1]).toEqual({ id: '2', title: 'Criar componente To-Do', status: 'in_progress' })
-    expect(run?.todos?.[2]).toEqual({ id: '3', title: 'Validar testes', status: 'pending' })
+    expect(run?.todos?.[0]).toMatchObject({ id: '1', title: 'Ler documentação', status: 'done' })
+    expect(run?.todos?.[1]).toMatchObject({ id: '2', title: 'Criar componente To-Do', status: 'in_progress' })
+    expect(run?.todos?.[2]).toMatchObject({ id: '3', title: 'Validar testes', status: 'pending' })
 
     const steps = run?.steps ?? []
     expect(steps.some((s) => s.label.includes('To-Do'))).toBe(true)

@@ -712,13 +712,16 @@ export class Runner {
         if (name === GERENCIAR_TAREFAS.name) {
           const rawList = Array.isArray(args['tarefas']) ? args['tarefas'] : Array.isArray(args['tasks']) ? args['tasks'] : Array.isArray(args['todos']) ? args['todos'] : []
           if (!rawList.length) return textResult(L('A lista de tarefas não pode ser vazia.', 'Task list cannot be empty.'), true)
+          const before = msg.run?.todos ?? []
           const todos: TodoItem[] = rawList.map((item: any, idx: number) => {
             const rawObj = (item && typeof item === 'object') ? item : { titulo: String(item) }
             const title = typeof rawObj.titulo === 'string' ? rawObj.titulo.trim() : typeof rawObj.title === 'string' ? rawObj.title.trim() : ''
             const rawStatus = typeof rawObj.status === 'string' ? rawObj.status.toLowerCase() : 'pending'
             const status: TodoStatus = ['pending', 'in_progress', 'done', 'cancelled'].includes(rawStatus) ? (rawStatus as TodoStatus) : 'pending'
             const id = typeof rawObj.id === 'string' && rawObj.id.trim() ? rawObj.id.trim() : `todo_${idx + 1}`
-            return { id, title: title || `Tarefa ${idx + 1}`, status }
+            // The list comes whole each time: keep when each item started and ended, for the timeline.
+            const prev = before.find((t) => t.id === id) ?? before.find((t) => t.title === title)
+            return { id, title: title || `Tarefa ${idx + 1}`, status, ...(prev?.startedAt ? { startedAt: prev.startedAt } : {}), ...(prev?.doneAt && (status === 'done' || status === 'cancelled') ? { doneAt: prev.doneAt } : {}) }
           })
           msg.run = { ...msg.run!, todos }
           const doneCount = todos.filter((t) => t.status === 'done').length

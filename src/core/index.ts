@@ -48,6 +48,7 @@ import { detectHosts } from './hosts'
 import { listProjectFiles, readProjectFile, writeProjectFile, runProjectCommand } from './project-files'
 import { Routines } from './routines'
 import { Runner } from './runs'
+import { Tasks } from './tasks'
 import { agentFromDraft, availableModels, tucaAgent, tucaHello, tucaInstructions } from './tuca'
 import { seed } from './seed'
 
@@ -188,10 +189,19 @@ const gatewayLists = new Map<EngineId, Promise<{ models: string[]; error?: strin
 // ---------- ports ----------
 
 const ports = new Set<MessagePortMain>()
+// The board follows every reply as it's emitted (set once the runner exists).
+let tasksRef: Tasks | undefined
 function emit(event: CoreEvent): void {
   const wire: Wire = { event }
   for (const p of ports) p.postMessage(wire)
   toPhone(event)
+  if (event.type === 'message' && tasksRef) {
+    try {
+      tasksRef.observe(event.message)
+    } catch (e) {
+      console.error('[tasks]', e)
+    }
+  }
 }
 
 // The phone gets each new approval and question as it happens (spec §19).
@@ -451,6 +461,8 @@ const runner = new Runner({
   }
 })
 runner.setPaused(!!settings().paused)
+const tasks = new Tasks({ db, emit, send: (conversationId, text) => runner.send(conversationId, text) })
+tasksRef = tasks
 // Installs from before the Tuca get him at the first start after the introduction.
 void ready.then(() => {
   if (settings().onboarding?.done) ensureTuca()
@@ -649,6 +661,7 @@ const api: Api = {
     browsers: browser.list(),
     routines: db.routines(),
     skills: db.skills(),
+    tasks: tasks.list(),
     platform: osOf(),
     packaged: process.env['ELEFANTE_PACKAGED'] === '1',
     demoServer: existsSync(demoPath) ? { command: 'node', args: [demoPath] } : undefined
@@ -657,6 +670,11 @@ const api: Api = {
   sendMessage: ({ conversationId, text, images }) => {
     void runner.send(conversationId, text, images)
   },
+
+  saveTask: ({ task }) => tasks.save(task),
+  moveTask: ({ id, status }) => tasks.move(id, status),
+  startTask: ({ id }) => tasks.start(id),
+  removeTask: ({ id }) => tasks.remove(id),
 
   stopRun: ({ messageId }) => runner.stop(messageId),
 
@@ -728,6 +746,7 @@ const api: Api = {
     for (const m of db.messages()) if (m.conversationId === id && (m.run?.status === 'working' || m.run?.status === 'waiting_approval')) runner.stop(m.id)
     for (const r of db.routines()) if (r.conversationId === id) routines.remove(r.id)
     for (const a of db.approvals()) if (a.conversationId === id && a.state === 'pending' && db.decideApproval(a.id, 'expired', L('O canal foi excluído.', 'The channel was deleted.'))) emit({ type: 'approval', approval: db.approvals().find((x) => x.id === a.id)! })
+    tasks.removeConversation(id)
     db.deleteConversation(id)
     emit({ type: 'conversation_removed', id })
   },
