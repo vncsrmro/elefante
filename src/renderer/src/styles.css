@@ -10112,6 +10112,8 @@ body.is-resizing-panel iframe {
   flex-direction: column;
   gap: 3px;
   background: var(--bg-1, rgba(0, 0, 0, 0.1));
+  max-height: 260px;
+  overflow-y: auto;
 }
 .todo-item {
   display: flex;
@@ -11387,6 +11389,8 @@ body.is-resizing-panel iframe {
   display: flex;
   flex-direction: column;
   gap: 3px;
+  max-height: 240px;
+  overflow-y: auto;
 }
 
 .mission-todo-row {
@@ -11572,6 +11576,39 @@ body.is-resizing-panel iframe {
   margin-bottom: 12px;
 }
 
+.mission-hub__progress-text {
+  flex: 1;
+  min-width: 0;
+}
+
+.mission-hub__order-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 3px 8px;
+  border-radius: 6px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: rgba(255, 255, 255, 0.04);
+  color: var(--text-2);
+  font-size: 11px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  white-space: nowrap;
+}
+
+.mission-hub__order-btn:hover {
+  background: rgba(56, 189, 248, 0.12);
+  border-color: rgba(56, 189, 248, 0.3);
+  color: #38bdf8;
+}
+
+.mission-hub__order-btn.is-active {
+  background: rgba(56, 189, 248, 0.08);
+  border-color: rgba(56, 189, 248, 0.25);
+  color: #38bdf8;
+}
+
 .mission-hub__progress-icon {
   width: 28px;
   height: 28px;
@@ -11611,6 +11648,45 @@ body.is-resizing-panel iframe {
   padding: 16px 8px;
   color: var(--text-3);
   font-size: 12px;
+}
+
+.mission-feed-item.is-latest {
+  background: rgba(56, 189, 248, 0.06);
+  border-radius: 8px;
+  padding: 8px 10px;
+  margin-bottom: 4px;
+  border: 1px solid rgba(56, 189, 248, 0.18);
+  box-shadow: 0 0 12px rgba(56, 189, 248, 0.1);
+}
+
+.mission-feed-item__meta {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-top: 4px;
+}
+
+.mission-feed-item__badge-new {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 1px 6px;
+  border-radius: 4px;
+  background: rgba(56, 189, 248, 0.2);
+  color: #38bdf8;
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+}
+
+.mission-feed-item__pulse-dot {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: #38bdf8;
+  box-shadow: 0 0 6px #38bdf8;
+  animation: pulse 1.8s infinite;
 }
 
 .mission-hub__feed-empty-dot {

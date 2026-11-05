@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, type ReactNode } from 'react'
+import { useState, useEffect, useRef, useMemo, type ReactNode } from 'react'
 import { L } from '../../../shared/lang'
 import { agentById, useStore, type Agent, type Message, type Step, type TodoItem } from '../store'
 import { AgentAvatar, Icon, time } from './ui'
@@ -12,6 +12,11 @@ export function MissionHub({ message, todos }: MissionHubProps): ReactNode {
   const me = useStore((s) => s.me)
   const agent = useStore((s) => (message.author.kind === 'agent' ? agentById(s, message.author.id) : undefined))
   
+  // Progress feed sort order: 'newest_first' (default, most recent on top) or 'oldest_first'
+  const [order, setOrder] = useState<'newest_first' | 'oldest_first'>('newest_first')
+  const feedRef = useRef<HTMLDivElement>(null)
+  const todosRef = useRef<HTMLUListElement>(null)
+
   // Scrubber playback state: 0 (start) to 100 (realtime current)
   const [playbackPct, setPlaybackPct] = useState(100)
   const [isPlaying, setIsPlaying] = useState(false)
@@ -40,6 +45,30 @@ export function MissionHub({ message, todos }: MissionHubProps): ReactNode {
     const isThinking = s.label.toLowerCase().includes('pensand') || s.label.toLowerCase().includes('thinking')
     return !isThinking && (s.detail || s.note || s.command || s.status === 'done' || s.status === 'error')
   })
+
+  // Display steps based on order ('newest_first' puts latest on top)
+  const displaySteps = useMemo(() => {
+    return order === 'newest_first' ? [...narrativeSteps].reverse() : narrativeSteps
+  }, [narrativeSteps, order])
+
+  // Auto-scroll feed: top if newest_first, bottom if oldest_first
+  useEffect(() => {
+    if (!feedRef.current) return
+    if (order === 'oldest_first') {
+      feedRef.current.scrollTo({ top: feedRef.current.scrollHeight, behavior: 'smooth' })
+    } else {
+      feedRef.current.scrollTo({ top: 0, behavior: 'smooth' })
+    }
+  }, [narrativeSteps.length, order])
+
+  // Auto-scroll checklist to active working todo
+  useEffect(() => {
+    if (!todosRef.current) return
+    const activeEl = todosRef.current.querySelector('.mission-todo-row.is-working')
+    if (activeEl) {
+      activeEl.scrollIntoView({ behavior: 'smooth', block: 'nearest' })
+    }
+  }, [todos])
 
   // Playback timer animation
   const togglePlay = (): void => {
@@ -90,7 +119,7 @@ export function MissionHub({ message, todos }: MissionHubProps): ReactNode {
         </div>
 
         {/* Checklist */}
-        <ul className="mission-hub__todos">
+        <ul ref={todosRef} className="mission-hub__todos">
           {todos.map((todo, idx) => {
             // Determine simulated status during playback
             const itemThreshold = totalCount > 0 ? ((idx + 1) / totalCount) * 100 : 0
@@ -182,27 +211,37 @@ export function MissionHub({ message, todos }: MissionHubProps): ReactNode {
           <div className="mission-hub__progress-icon">
             <Icon name="terminal" size={14} />
           </div>
-          <div>
+          <div className="mission-hub__progress-text">
             <h4 className="mission-hub__progress-title">{L('Progresso', 'Progress')}</h4>
             <span className="mission-hub__progress-desc">
               {L('O que o agente compartilha enquanto trabalha', 'What the agent shares while it works')}
             </span>
           </div>
+          <button
+            className={`mission-hub__order-btn ${order === 'newest_first' ? 'is-active' : ''}`}
+            onClick={() => setOrder(order === 'newest_first' ? 'oldest_first' : 'newest_first')}
+            type="button"
+            title={order === 'newest_first' ? L('Alternar para ordem cronológica (antigos primeiro)', 'Switch to chronological order (oldest first)') : L('Alternar para mais recentes no topo', 'Switch to newest at top')}
+          >
+            <Icon name="refresh" size={11} />
+            <span>{order === 'newest_first' ? L('Recente no topo', 'Newest first') : L('Cronológico', 'Chronological')}</span>
+          </button>
         </div>
 
-        <div className="mission-hub__feed">
-          {narrativeSteps.length === 0 ? (
+        <div ref={feedRef} className="mission-hub__feed">
+          {displaySteps.length === 0 ? (
             <div className="mission-hub__feed-empty">
               <span className="mission-hub__feed-empty-dot" />
               <span>{L('Aguardando primeiras atualizações do agente…', 'Waiting for initial updates from agent…')}</span>
             </div>
           ) : (
-            narrativeSteps.map((step) => {
+            displaySteps.map((step, idx) => {
               const textNote = step.note || (step.detail ? `${step.label}: ${step.detail}` : step.label)
               const stepTime = step.at ? time(step.at) : time(message.at)
+              const isLatest = order === 'newest_first' && idx === 0
 
               return (
-                <div key={step.id} className="mission-feed-item">
+                <div key={step.id} className={`mission-feed-item ${isLatest ? 'is-latest' : ''}`}>
                   <div className="mission-feed-item__avatar">
                     {agent ? <AgentAvatar agent={agent} size={20} /> : <span className="mission-feed-item__avatar-fallback" />}
                   </div>
@@ -211,9 +250,17 @@ export function MissionHub({ message, todos }: MissionHubProps): ReactNode {
                       <strong className="mission-feed-item__author">{authorName}</strong>{' '}
                       {textNote}
                     </p>
-                    <span className="mission-feed-item__time">
-                      {L('Dia 1', 'Day 1')} · {stepTime}
-                    </span>
+                    <div className="mission-feed-item__meta">
+                      <span className="mission-feed-item__time">
+                        {L('Dia 1', 'Day 1')} · {stepTime}
+                      </span>
+                      {isLatest && (
+                        <span className="mission-feed-item__badge-new">
+                          <span className="mission-feed-item__pulse-dot" />
+                          {L('Mais recente', 'Latest')}
+                        </span>
+                      )}
+                    </div>
                   </div>
                 </div>
               )
