@@ -12458,3 +12458,155 @@ body.is-resizing-panel iframe {
   font-size: 12px;
 }
 
+/* ---------- File link context popover ---------- */
+.file-link-popover {
+  width: 360px;
+  max-width: calc(100vw - 24px);
+  background: #12141a;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 10px;
+  box-shadow: 0 16px 36px rgba(0, 0, 0, 0.65), 0 0 0 1px rgba(255, 255, 255, 0.05);
+  overflow: hidden;
+  user-select: none;
+  animation: file-popover-fade 0.12s ease-out;
+  font-family: inherit;
+}
+
+@keyframes file-popover-fade {
+  from {
+    opacity: 0;
+    transform: translateY(3px) scale(0.98);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+.file-link-popover__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 8px 10px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.02);
+}
+
+.file-link-popover__path {
+  font-family: var(--font-mono, monospace);
+  font-size: 11px;
+  color: var(--text-2, #8b949e);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  flex: 1;
+  min-width: 0;
+}
+
+.file-link-popover__header-actions {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.file-link-popover__icon-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  border-radius: 4px;
+  border: none;
+  background: transparent;
+  color: var(--text-2, #8b949e);
+  cursor: pointer;
+  transition: background 0.12s ease, color 0.12s ease;
+}
+
+.file-link-popover__icon-btn:hover {
+  background: rgba(255, 255, 255, 0.08);
+  color: var(--text, #f1f5f9);
+}
+
+.file-link-popover__menu {
+  padding: 5px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.file-link-popover__item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  width: 100%;
+  padding: 7px 10px;
+  border-radius: 6px;
+  border: none;
+  background: transparent;
+  font-size: 12.5px;
+  font-weight: 500;
+  color: var(--text, #e2e8f0);
+  text-align: left;
+  cursor: pointer;
+  transition: background 0.12s ease, color 0.12s ease;
+}
+
+.file-link-popover__item:hover {
+  background: rgba(255, 255, 255, 0.08);
+  color: #fff;
+}
+
+.file-link-popover__item-label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.file-link-popover__item-label--with-icon {
+  gap: 8px;
+}
+
+.file-link-popover__badge {
+  font-family: inherit;
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--text-3, #94a3b8);
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 4px;
+  padding: 2px 6px;
+  white-space: nowrap;
+}
+
+/* File link pill in chat message */
+.md a.md-file-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 1px 7px;
+  margin: 0 2px;
+  background: rgba(34, 197, 94, 0.1);
+  border: 1px solid rgba(34, 197, 94, 0.3);
+  border-radius: 5px;
+  color: var(--accent, #4ade80);
+  text-decoration: none;
+  font-weight: 500;
+  font-size: 0.95em;
+  transition: all 0.15s ease;
+  cursor: pointer;
+}
+
+.md a.md-file-link:hover {
+  background: rgba(34, 197, 94, 0.22);
+  border-color: rgba(34, 197, 94, 0.55);
+  color: #fff;
+}
+
+

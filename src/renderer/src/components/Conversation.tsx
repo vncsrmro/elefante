@@ -1,9 +1,10 @@
 import { L } from '../../../shared/lang'
 import { CODE_SPANS } from '../../../shared/types'
-import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react'
+import { createContext, useContext, useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react'
 import Markdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import { call } from '../rpc'
+import { FileLinkPopover, type ParsedFileTarget } from './FileLinkPopover'
 import {
   agentById,
   conversationTitle,
@@ -53,6 +54,8 @@ import { AgentProposal } from './Tuca'
 import { MissionHub } from './MissionHub'
 import { KanbanBoard } from './KanbanBoard'
 
+const ConversationContext = createContext<{ conversationId?: string; project?: string }>({})
+
 export function ConversationView({ id }: { id: string }): ReactNode {
   const conv = useStore((s) => s.conversations.find((c) => c.id === id))
   const title = useStore((s) => (conv ? conversationTitle(s, conv) : ''))
@@ -96,7 +99,8 @@ export function ConversationView({ id }: { id: string }): ReactNode {
   }
 
   return (
-    <div className="split">
+    <ConversationContext.Provider value={{ conversationId: id, project: conv.project }}>
+      <div className="split">
       <section className="conversation">
         <header className="topbar">
           <div className="topbar__title">
@@ -229,6 +233,7 @@ export function ConversationView({ id }: { id: string }): ReactNode {
       </section>
       <SidePanel />
     </div>
+    </ConversationContext.Provider>
   )
 }
 
@@ -447,61 +452,147 @@ function RoutineMessage({ message }: { message: Message }): ReactNode {
   )
 }
 
-// Custom markdown link handler: opens web links in default browser, file paths in the lateral editor
+export function parseFileTarget(href: string, projectDir?: string): ParsedFileTarget {
+  let raw = href.trim()
+  let line: number | undefined = undefined
+  let endLine: number | undefined = undefined
+
+  // Extract hash lines e.g. #L150 or #L150-L165 or #L150-165
+  const hashMatch = raw.match(/#L?(\d+)(?:-L?(\d+))?$/i)
+  if (hashMatch) {
+    line = parseInt(hashMatch[1]!, 10)
+    if (hashMatch[2]) endLine = parseInt(hashMatch[2]!, 10)
+    raw = raw.replace(/#L?(\d+)(?:-L?(\d+))?$/i, '')
+  } else {
+    const colonMatch = raw.match(/:(\d+)(?::(\d+))?$/)
+    if (colonMatch) {
+      line = parseInt(colonMatch[1]!, 10)
+      raw = raw.replace(/:(\d+)(?::(\d+))?$/, '')
+    }
+  }
+
+  let clean = raw
+  if (clean.startsWith('file:///')) {
+    clean = decodeURIComponent(clean.replace(/^file:\/\/\//, ''))
+    if (/^[a-zA-Z]:/.test(clean)) {
+      clean = clean.replace(/\//g, '\\')
+    } else if (!clean.startsWith('/')) {
+      clean = '/' + clean
+    }
+  } else if (clean.startsWith('file://')) {
+    clean = decodeURIComponent(clean.replace(/^file:\/\//, ''))
+    if (/^[a-zA-Z]:/.test(clean)) {
+      clean = clean.replace(/\//g, '\\')
+    }
+  }
+
+  const isAbsolute = /^[a-zA-Z]:[/\\]/.test(clean) || clean.startsWith('/') || clean.startsWith('\\')
+  let filePath = clean
+  if (!isAbsolute && projectDir) {
+    const base = projectDir.replace(/[/\\]+$/, '')
+    const sep = base.includes('\\') ? '\\' : '/'
+    filePath = `${base}${sep}${clean.replace(/^[/\\]+/, '')}`
+  }
+
+  if (/^[a-zA-Z]:/.test(filePath)) {
+    filePath = filePath.replace(/\//g, '\\')
+  }
+
+  const fileName = filePath.split(/[/\\]/).pop() || filePath
+  const fileUrl = /^[a-zA-Z]:/.test(filePath)
+    ? `file:///${filePath.replace(/\\/g, '/')}`
+    : filePath.startsWith('/')
+      ? `file://${filePath}`
+      : filePath
+
+  return {
+    rawUrl: href,
+    filePath,
+    fileUrl: line ? `${fileUrl}#L${line}${endLine ? `-L${endLine}` : ''}` : fileUrl,
+    fileName,
+    line,
+    endLine
+  }
+}
+
+// Custom markdown link handler: opens web links in default browser, file paths with context popover or hotkeys
 function MarkdownLink({ href, children, ...props }: React.AnchorHTMLAttributes<HTMLAnchorElement>): ReactNode {
+  const ctx = useContext(ConversationContext)
+  const fallbackProject = useStore((s) => s.conversations.find((c) => !!c.project)?.project)
+  const projectDir = ctx.project || fallbackProject
+  const [popover, setPopover] = useState<{ target: ParsedFileTarget; rect: DOMRect } | null>(null)
+
+  if (!href) {
+    return <a {...props}>{children}</a>
+  }
+
+  const isWeb = /^https?:\/\//i.test(href)
+
   const handleClick = (e: React.MouseEvent<HTMLAnchorElement>): void => {
-    if (!href) return
     e.preventDefault()
 
-    // 1. External Web links (http:// or https://)
-    if (/^https?:\/\//i.test(href)) {
+    if (isWeb) {
       openExternal(href)
       return
     }
 
-    // 2. File URLs (e.g. file:///D:/path/file.md or file://...)
-    let cleanPath = href
-    if (cleanPath.startsWith('file:///')) {
-      cleanPath = decodeURIComponent(cleanPath.replace(/^file:\/\/\//, ''))
-      if (/^[a-zA-Z]:/.test(cleanPath)) {
-        cleanPath = cleanPath.replace(/\//g, '\\')
-      } else if (!cleanPath.startsWith('/')) {
-        cleanPath = '/' + cleanPath
-      }
-    } else if (cleanPath.startsWith('file://')) {
-      cleanPath = decodeURIComponent(cleanPath.replace(/^file:\/\//, ''))
-      if (/^[a-zA-Z]:/.test(cleanPath)) {
-        cleanPath = cleanPath.replace(/\//g, '\\')
-      }
+    const target = parseFileTarget(href, projectDir)
+
+    // Direct Ctrl+Click (or Cmd+Click on Mac): Open directly in lateral editor
+    if ((e.ctrlKey || e.metaKey) && !e.shiftKey) {
+      openFileInEditor(target.filePath, target.line)
+      return
     }
 
-    // Open file or directory in lateral editor/viewer
-    openFileInEditor(cleanPath)
+    // Direct Shift + Ctrl+Click (or Shift + Cmd+Click): Open in system default application
+    if ((e.ctrlKey || e.metaKey) && e.shiftKey) {
+      openFolderPath(target.filePath)
+      return
+    }
+
+    // Normal Click: Open context popover anchored to link!
+    const rect = e.currentTarget.getBoundingClientRect()
+    setPopover({ target, rect })
   }
 
   return (
-    <a href={href} onClick={handleClick} {...props}>
-      {children}
-    </a>
+    <>
+      <a
+        href={href}
+        onClick={handleClick}
+        className={!isWeb ? 'md-file-link' : undefined}
+        title={
+          !isWeb
+            ? `${L('Clique para opções · Ctrl+Click para abrir no editor · Shift+Ctrl+Click para app padrão', 'Click for options · Ctrl+Click to open in editor · Shift+Ctrl+Click for default app')}`
+            : href
+        }
+        {...props}
+      >
+        {!isWeb && <Icon name="fileCode" size={12} />}
+        {children}
+      </a>
+      {popover && (
+        <FileLinkPopover
+          target={popover.target}
+          anchorRect={popover.rect}
+          onClose={() => setPopover(null)}
+        />
+      )}
+    </>
   )
 }
 
 function MarkdownImage({ src, alt, ...props }: React.ImgHTMLAttributes<HTMLImageElement>): ReactNode {
+  const ctx = useContext(ConversationContext)
+  const fallbackProject = useStore((s) => s.conversations.find((c) => !!c.project)?.project)
+  const projectDir = ctx.project || fallbackProject
   const [dataSrc, setDataSrc] = useState<string | undefined>(src)
 
   useEffect(() => {
     if (!src) return
-    // If it's a local file or file URI, load through readProjectFile to get base64 data URL
-    if (src.startsWith('file:') || /^[a-zA-Z]:[/\\]/.test(src) || src.startsWith('/')) {
-      let cleanPath = src
-      if (cleanPath.startsWith('file:///')) {
-        cleanPath = decodeURIComponent(cleanPath.replace(/^file:\/\/\//, ''))
-        if (/^[a-zA-Z]:/.test(cleanPath)) cleanPath = cleanPath.replace(/\//g, '\\')
-      } else if (cleanPath.startsWith('file://')) {
-        cleanPath = decodeURIComponent(cleanPath.replace(/^file:\/\//, ''))
-        if (/^[a-zA-Z]:/.test(cleanPath)) cleanPath = cleanPath.replace(/\//g, '\\')
-      }
-      void call('readProjectFile', { filePath: cleanPath })
+    if (src.startsWith('file:') || /^[a-zA-Z]:[/\\]/.test(src) || src.startsWith('/') || !/^https?:\/\//i.test(src)) {
+      const target = parseFileTarget(src, projectDir)
+      void call('readProjectFile', { filePath: target.filePath, rootDir: projectDir })
         .then((info) => {
           if (info.content && info.content.startsWith('data:image')) {
             setDataSrc(info.content)
@@ -509,20 +600,13 @@ function MarkdownImage({ src, alt, ...props }: React.ImgHTMLAttributes<HTMLImage
         })
         .catch(() => {})
     }
-  }, [src])
+  }, [src, projectDir])
 
   const handleClick = (e: React.MouseEvent): void => {
     e.stopPropagation()
     if (!src) return
-    let cleanPath = src
-    if (cleanPath.startsWith('file:///')) {
-      cleanPath = decodeURIComponent(cleanPath.replace(/^file:\/\/\//, ''))
-      if (/^[a-zA-Z]:/.test(cleanPath)) cleanPath = cleanPath.replace(/\//g, '\\')
-    } else if (cleanPath.startsWith('file://')) {
-      cleanPath = decodeURIComponent(cleanPath.replace(/^file:\/\//, ''))
-      if (/^[a-zA-Z]:/.test(cleanPath)) cleanPath = cleanPath.replace(/\//g, '\\')
-    }
-    openFileInEditor(cleanPath)
+    const target = parseFileTarget(src, projectDir)
+    openFileInEditor(target.filePath)
   }
 
   return (

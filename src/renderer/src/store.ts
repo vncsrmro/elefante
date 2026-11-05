@@ -92,7 +92,10 @@ export interface State {
   rightPanelOpen: boolean // project explorer & code editor panel on the right
   rightPanelWidth: number // width in px
   activeEditorFile?: string | null
+  activeEditorLine?: number | null
   previousView?: View | null
+  history: View[]
+  historyIndex: number
   demoServer?: { command: string; args: string[] }
 }
 
@@ -148,7 +151,10 @@ let state: State = {
   rightPanelOpen: false,
   rightPanelWidth: typeof localStorage !== 'undefined' ? Number(localStorage.getItem('elefante:panel-width')) || 560 : 560,
   activeEditorFile: null,
-  previousView: null
+  activeEditorLine: null,
+  previousView: null,
+  history: [],
+  historyIndex: -1
 }
 
 // ---------- store plumbing ----------
@@ -337,26 +343,83 @@ export function conversationTitle(s: State, c: Conversation): string {
 
 export const setNav = (navOpen: boolean): void => set((s) => ({ ...s, navOpen }))
 
+export function isSameView(a?: View | null, b?: View | null): boolean {
+  if (!a || !b) return a === b
+  if (a.kind !== b.kind) return false
+  if (a.kind === 'conversation' && b.kind === 'conversation') return a.id === b.id
+  if (a.kind === 'agent' && b.kind === 'agent') return a.id === b.id
+  if (a.kind === 'board' && b.kind === 'board') return a.conversationId === b.conversationId
+  return JSON.stringify(a) === JSON.stringify(b)
+}
+
 export const navigate = (view: View): void =>
-  set((s) => ({
-    ...s,
-    previousView: s.view && JSON.stringify(s.view) !== JSON.stringify(view) ? s.view : s.previousView,
-    view,
-    navOpen: false,
-    panel: s.view?.kind === view.kind && JSON.stringify(s.view) === JSON.stringify(view) ? s.panel : null,
-    conversations:
-      view.kind === 'conversation' ? s.conversations.map((c) => (c.id === view.id ? { ...c, unread: 0 } : c)) : s.conversations
-  }))
+  set((s) => {
+    if (isSameView(s.view, view)) return s
+    const currentHist = s.history || []
+    const curIdx = s.historyIndex >= 0 ? s.historyIndex : (s.view ? 0 : -1)
+    const baseHist = curIdx >= 0 ? currentHist.slice(0, curIdx + 1) : (s.view ? [s.view] : [])
+    const nextHist = [...baseHist, view].slice(-50)
+    const nextIdx = nextHist.length - 1
+
+    return {
+      ...s,
+      previousView: s.view,
+      view,
+      history: nextHist,
+      historyIndex: nextIdx,
+      navOpen: false,
+      panel: s.view?.kind === view.kind && JSON.stringify(s.view) === JSON.stringify(view) ? s.panel : null,
+      conversations:
+        view.kind === 'conversation' ? s.conversations.map((c) => (c.id === view.id ? { ...c, unread: 0 } : c)) : s.conversations
+    }
+  })
 
 export const navigateBack = (): void => {
-  const prev = state.previousView
-  if (prev) {
-    navigate(prev)
+  const s = getState()
+  if (s.history && s.historyIndex > 0 && s.history[s.historyIndex - 1]) {
+    const prevView = s.history[s.historyIndex - 1]!
+    set((state) => ({
+      ...state,
+      previousView: state.view,
+      view: prevView,
+      historyIndex: state.historyIndex - 1,
+      navOpen: false,
+      conversations:
+        prevView.kind === 'conversation' ? state.conversations.map((c) => (c.id === prevView.id ? { ...c, unread: 0 } : c)) : state.conversations
+    }))
+  } else if (s.previousView && !isSameView(s.view, s.previousView)) {
+    navigate(s.previousView)
   } else {
-    const firstConv = state.conversations[0]
+    const firstConv = s.conversations[0]
     if (firstConv) navigate({ kind: 'conversation', id: firstConv.id })
     else navigate({ kind: 'providers' })
   }
+}
+
+export const navigateForward = (): void => {
+  const s = getState()
+  if (s.history && s.historyIndex < s.history.length - 1 && s.history[s.historyIndex + 1]) {
+    const nextView = s.history[s.historyIndex + 1]!
+    set((state) => ({
+      ...state,
+      previousView: state.view,
+      view: nextView,
+      historyIndex: state.historyIndex + 1,
+      navOpen: false,
+      conversations:
+        nextView.kind === 'conversation' ? state.conversations.map((c) => (c.id === nextView.id ? { ...c, unread: 0 } : c)) : state.conversations
+    }))
+  }
+}
+
+export const canGoBack = (): boolean => {
+  const s = getState()
+  return (s.history && s.historyIndex > 0) || !!s.previousView
+}
+
+export const canGoForward = (): boolean => {
+  const s = getState()
+  return !!s.history && s.historyIndex < s.history.length - 1
 }
 
 export function updateSettings(patch: Partial<Omit<Settings, 'engines'>>): void {
@@ -505,8 +568,9 @@ export const setRightPanelWidth = (width: number): void => {
   if (typeof document !== 'undefined') document.documentElement.style.setProperty('--right-panel-width', `${clamped}px`)
   set((s) => ({ ...s, rightPanelWidth: clamped }))
 }
-export const openFileInEditor = (filePath: string): void => set((s) => ({ ...s, rightPanelOpen: true, activeEditorFile: filePath }))
-export const clearActiveEditorFile = (): void => set((s) => ({ ...s, activeEditorFile: null }))
+export const openFileInEditor = (filePath: string, line?: number | null): void =>
+  set((s) => ({ ...s, rightPanelOpen: true, activeEditorFile: filePath, activeEditorLine: line }))
+export const clearActiveEditorFile = (): void => set((s) => ({ ...s, activeEditorFile: null, activeEditorLine: null }))
 export const openDialog = (dialog: Dialog | null): void => set((s) => ({ ...s, dialog, navOpen: dialog ? false : s.navOpen }))
 export const setTab = (page: string, tab: string): void => set((s) => ({ ...s, tabs: { ...s.tabs, [page]: tab } }))
 export const computerAction = (agentId: string, action: 'start' | 'restart' | 'erase' | 'open_folder' | 'refresh'): void =>

@@ -218,8 +218,12 @@ export function listProjectFiles(folderPath: string, maxDepth = 4): { root: stri
   return { root: normRoot, name: basename(normRoot), files }
 }
 
-export function readProjectFile(filePath: string): ProjectFileInfo {
-  const normPath = resolve(filePath)
+export function readProjectFile(filePath: string, rootDir?: string): ProjectFileInfo {
+  let normPath = resolve(filePath)
+  if (!existsSync(normPath) && rootDir) {
+    const candidate = resolve(rootDir, filePath)
+    if (existsSync(candidate)) normPath = candidate
+  }
   if (!existsSync(normPath)) {
     throw new Error(`Arquivo não encontrado: ${filePath}`)
   }
@@ -408,8 +412,12 @@ export function readProjectFile(filePath: string): ProjectFileInfo {
   }
 }
 
-export function writeProjectFile(filePath: string, content: string): { ok: boolean } {
-  const normPath = resolve(filePath)
+export function writeProjectFile(filePath: string, content: string, rootDir?: string): { ok: boolean } {
+  let normPath = resolve(filePath)
+  if (!existsSync(normPath) && rootDir) {
+    const candidate = resolve(rootDir, filePath)
+    if (existsSync(candidate)) normPath = candidate
+  }
   writeFileSync(normPath, content, 'utf-8')
   return { ok: true }
 }

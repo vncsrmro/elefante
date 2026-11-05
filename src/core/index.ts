@@ -1016,8 +1016,8 @@ const api: Api = {
   loginCloudCli: ({ command }) => installer(command),
   installCloudCli: ({ command }) => installer(command),
   listProjectFiles: ({ folderPath }) => listProjectFiles(folderPath),
-  readProjectFile: ({ filePath }) => readProjectFile(filePath),
-  writeProjectFile: ({ filePath, content }) => writeProjectFile(filePath, content),
+  readProjectFile: ({ filePath, rootDir }) => readProjectFile(filePath, rootDir),
+  writeProjectFile: ({ filePath, content, rootDir }) => writeProjectFile(filePath, content, rootDir),
   runProjectCommand: ({ folderPath, command, shell }) => runProjectCommand(folderPath, command, shell),
   hosts: async () => detectHosts(),
 

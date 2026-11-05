@@ -382,6 +382,11 @@ function createWindow(): BrowserWindow {
     }
   })
 
+  // Forward hardware app commands (e.g. mouse back/forward buttons: browser-backward, browser-forward)
+  win.on('app-command', (_e, cmd) => {
+    win.webContents.send('app-command', cmd)
+  })
+
   // Links in messages open in the default browser or in the lateral code editor, never navigating the app away.
   win.webContents.setWindowOpenHandler(({ url }) => {
     if (/^https?:\/\//i.test(url)) {

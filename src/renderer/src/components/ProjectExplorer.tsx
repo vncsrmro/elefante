@@ -316,6 +316,7 @@ export function ProjectExplorer({ currentProject }: { currentProject?: string })
   const conversations = useStore((s) => s.conversations)
   const models = useStore((s) => s.models)
   const activeEditorFile = useStore((s) => s.activeEditorFile)
+  const activeEditorLine = useStore((s) => s.activeEditorLine)
 
   // Resizing state
   const [isResizing, setIsResizing] = useState<boolean>(false)
@@ -392,17 +393,36 @@ export function ProjectExplorer({ currentProject }: { currentProject?: string })
     })
   }
 
+  // Helper to scroll to a specific line in editor
+  const scrollToLine = (lineNum: number): void => {
+    if (textareaRef.current) {
+      const lines = textareaRef.current.value.split('\n')
+      let pos = 0
+      for (let i = 0; i < Math.min(lineNum - 1, lines.length); i++) {
+        pos += (lines[i]?.length || 0) + 1
+      }
+      textareaRef.current.focus()
+      const lineLen = lines[lineNum - 1]?.length || 0
+      textareaRef.current.setSelectionRange(pos, pos + lineLen)
+      const approxLineHeight = 20
+      textareaRef.current.scrollTop = Math.max(0, (lineNum - 3) * approxLineHeight)
+    }
+  }
+
   // Open file in a tab
-  const openFile = async (item: ProjectFileItem): Promise<void> => {
+  const openFile = async (item: ProjectFileItem, targetLine?: number | null): Promise<void> => {
     const existing = tabs.find((t) => t.kind === 'file' && t.path === item.path)
     if (existing) {
       setActiveTabId(existing.id)
       setEditMode(true)
+      if (targetLine) {
+        setTimeout(() => scrollToLine(targetLine), 60)
+      }
       return
     }
 
     try {
-      const info: ProjectFileInfo = await call('readProjectFile', { filePath: item.path })
+      const info: ProjectFileInfo = await call('readProjectFile', { filePath: item.path, rootDir: folderPath })
       if (info.isFolder) {
         setFolderPath(info.path)
         setActiveTabId('tab-files')
@@ -432,6 +452,9 @@ export function ProjectExplorer({ currentProject }: { currentProject?: string })
       setTabs((prev) => [...prev, newTab])
       setActiveTabId(newId)
       setEditMode(true)
+      if (targetLine) {
+        setTimeout(() => scrollToLine(targetLine), 100)
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err))
     }
@@ -441,14 +464,18 @@ export function ProjectExplorer({ currentProject }: { currentProject?: string })
   useEffect(() => {
     if (!activeEditorFile) return
     const path = activeEditorFile
+    const line = activeEditorLine
     clearActiveEditorFile()
-    void openFile({
-      name: path.split(/[/\\]/).pop() || path,
-      path: path,
-      relPath: path,
-      kind: 'file'
-    })
-  }, [activeEditorFile])
+    void openFile(
+      {
+        name: path.split(/[/\\]/).pop() || path,
+        path: path,
+        relPath: path,
+        kind: 'file'
+      },
+      line
+    )
+  }, [activeEditorFile, activeEditorLine])
 
   // Close tab
   const closeTab = (tabId: string, e?: React.MouseEvent): void => {
@@ -697,10 +724,27 @@ export function ProjectExplorer({ currentProject }: { currentProject?: string })
     }
   }
 
-  // Keyboard Shortcuts (Ctrl+T, Ctrl+Shift+B, Ctrl+Shift+M, Ctrl+S, Ctrl+W)
+  // Keyboard Shortcuts (Ctrl+T, Ctrl+Shift+B, Ctrl+Shift+M, Ctrl+S, Ctrl+W, Ctrl+Tab)
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent): void => {
       const isMod = e.ctrlKey || e.metaKey
+
+      // Ctrl+Tab / Ctrl+Shift+Tab: cycle through open tabs
+      if (isMod && e.key === 'Tab') {
+        e.preventDefault()
+        e.stopPropagation()
+        if (tabs.length > 1) {
+          const curIdx = tabs.findIndex((t) => t.id === activeTabId)
+          if (curIdx >= 0) {
+            const nextIdx = e.shiftKey
+              ? (curIdx - 1 + tabs.length) % tabs.length
+              : (curIdx + 1) % tabs.length
+            setActiveTabId(tabs[nextIdx]!.id)
+          }
+        }
+        return
+      }
+
       if (isMod && e.key.toLowerCase() === 't' && !e.shiftKey) {
         e.preventDefault()
         addTerminalTab('powershell')
@@ -716,9 +760,15 @@ export function ProjectExplorer({ currentProject }: { currentProject?: string })
           void saveActiveFile()
         }
       } else if (isMod && e.key.toLowerCase() === 'w') {
-        if (tabs.length > 1) {
+        if (tabs.length > 1 || activeTabId !== 'tab-files') {
           e.preventDefault()
-          closeTab(activeTabId)
+          e.stopPropagation()
+          if (activeTabId !== 'tab-files') {
+            closeTab(activeTabId)
+          } else {
+            const lastTab = tabs[tabs.length - 1]
+            if (lastTab && lastTab.id !== 'tab-files') closeTab(lastTab.id)
+          }
         }
       } else if (e.key === 'Escape') {
         if (isMenuOpen) {
@@ -732,6 +782,22 @@ export function ProjectExplorer({ currentProject }: { currentProject?: string })
     window.addEventListener('keydown', handleKeyDown, true)
     return () => window.removeEventListener('keydown', handleKeyDown, true)
   }, [activeTab, activeTabId, tabs, isMenuOpen, editMode])
+
+  // Listen to native close-tab event from Electron main process
+  useEffect(() => {
+    const handleCloseTab = (): void => {
+      if (activeTabId && activeTabId !== 'tab-files') {
+        closeTab(activeTabId)
+      } else if (tabs.length > 1) {
+        const lastTab = tabs[tabs.length - 1]
+        if (lastTab && lastTab.id !== 'tab-files') {
+          closeTab(lastTab.id)
+        }
+      }
+    }
+    window.addEventListener('elefante:close-tab', handleCloseTab)
+    return () => window.removeEventListener('elefante:close-tab', handleCloseTab)
+  }, [activeTabId, tabs])
 
   // Drag resizer handler
   const handleResizerMouseDown = (e: React.MouseEvent): void => {

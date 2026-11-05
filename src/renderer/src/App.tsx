@@ -1,6 +1,6 @@
 import { useEffect, type ReactNode } from 'react'
 import { L } from '../../shared/lang'
-import { getState, navigate, openDialog, openFileInEditor, setNav, toggleRightPanel, useStore } from './store'
+import { getState, navigate, navigateBack, navigateForward, openDialog, openFileInEditor, setNav, toggleRightPanel, useStore } from './store'
 import { Sidebar } from './components/Sidebar'
 import { ConversationView } from './components/Conversation'
 import { AgentPage, ApprovalsPage, ConnectorsPage, SettingsPage } from './components/Pages'
@@ -29,6 +29,7 @@ export function App(): ReactNode {
   const navOpen = useStore((s) => s.navOpen)
   const rightPanelOpen = useStore((s) => s.rightPanelOpen)
   const rightPanelWidth = useStore((s) => s.rightPanelWidth)
+  const fallbackProject = useStore((s) => s.conversations.find((c) => !!c.project)?.project)
   const activeConv = useStore((s) => (view?.kind === 'conversation' ? s.conversations.find((c) => c.id === view.id) : undefined))
 
   useEffect(() => {
@@ -50,11 +51,15 @@ export function App(): ReactNode {
     else document.documentElement.dataset['theme'] = theme
   }, [theme])
 
-  // Listen for native app commands from menu / shortcuts (e.g. close-tab)
+  // Listen for native app commands from menu / shortcuts (e.g. close-tab, browser-backward, browser-forward)
   useEffect(() => {
     window.elefante?.onAppCommand?.((cmd) => {
       if (cmd === 'close-tab') {
         window.dispatchEvent(new CustomEvent('elefante:close-tab'))
+      } else if (cmd === 'browser-backward') {
+        navigateBack()
+      } else if (cmd === 'browser-forward') {
+        navigateForward()
       }
     })
     window.elefante?.onOpenFileInEditor?.((filePath) => {
@@ -62,16 +67,51 @@ export function App(): ReactNode {
     })
   }, [])
 
-  // ⌘K go anywhere · ⌘N new channel · ⌘1–9 the channels in order · ⌘, settings (Ctrl off a Mac)
+  // Mouse side buttons: button 3 = Back, button 4 = Forward
+  useEffect(() => {
+    const handleMouseAux = (e: MouseEvent): void => {
+      if (e.button === 3) {
+        e.preventDefault()
+        e.stopPropagation()
+        navigateBack()
+      } else if (e.button === 4) {
+        e.preventDefault()
+        e.stopPropagation()
+        navigateForward()
+      }
+    }
+    window.addEventListener('mouseup', handleMouseAux)
+    window.addEventListener('auxclick', handleMouseAux)
+    return () => {
+      window.removeEventListener('mouseup', handleMouseAux)
+      window.removeEventListener('auxclick', handleMouseAux)
+    }
+  }, [])
+
+  // ⌘K go anywhere · ⌘N new channel · ⌘1–9 channels · ⌘B / ⌘\ toggle editor · Alt+Left / Alt+Right navigation
   useEffect(() => {
     const keys = (e: KeyboardEvent): void => {
+      // Alt + ArrowLeft / ArrowRight for Back and Forward navigation
+      if (e.altKey && !e.ctrlKey && !e.metaKey) {
+        if (e.key === 'ArrowLeft') {
+          e.preventDefault()
+          navigateBack()
+          return
+        }
+        if (e.key === 'ArrowRight') {
+          e.preventDefault()
+          navigateForward()
+          return
+        }
+      }
+
       const mod = mac ? e.metaKey && !e.ctrlKey : e.ctrlKey && !e.metaKey
-      if (!mod || e.altKey || intro) return
+      if (!mod || intro) return
       const s = getState()
       const channels = s.conversations.filter((c) => c.kind === 'channel')
       if (e.key === 'k') openDialog(s.dialog?.kind === 'search' ? null : { kind: 'search' })
       else if (e.key === 'n' && !e.shiftKey) openDialog({ kind: 'new-channel' })
-      else if (e.key === 'b') toggleRightPanel()
+      else if (e.key === 'b' || e.key === '\\') toggleRightPanel()
       else if (e.key === ',') navigate({ kind: 'settings' })
       else if (/^[1-9]$/.test(e.key) && channels[Number(e.key) - 1]) navigate({ kind: 'conversation', id: channels[Number(e.key) - 1]!.id })
       else return
@@ -123,7 +163,7 @@ export function App(): ReactNode {
         {view.kind === 'settings' && <SettingsPage />}
         {view.kind === 'board' && <KanbanBoard conversationId={view.conversationId} />}
       </main>
-      {rightPanelOpen && <ProjectExplorer currentProject={activeConv?.project} />}
+      {rightPanelOpen && <ProjectExplorer currentProject={activeConv?.project || fallbackProject} />}
       <StatusBar />
       <OneInboxDrawer />
       <Dialogs />

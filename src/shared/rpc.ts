@@ -106,8 +106,8 @@ export interface Api {
   removeRoutine(p: { id: string }): void
   runRoutine(p: { id: string }): void
   listProjectFiles(p: { folderPath: string }): { root: string; name: string; files: ProjectFileItem[] }
-  readProjectFile(p: { filePath: string }): ProjectFileInfo
-  writeProjectFile(p: { filePath: string; content: string }): { ok: boolean }
+  readProjectFile(p: { filePath: string; rootDir?: string }): ProjectFileInfo
+  writeProjectFile(p: { filePath: string; content: string; rootDir?: string }): { ok: boolean }
   runProjectCommand(p: { folderPath: string; command: string; shell?: 'powershell' | 'cmd' | 'bash' }): Promise<{ output: string; exitCode: number }>
   hosts(): Promise<HostDiscoveryResult>
   saveTask(p: { task: TaskInput }): Task // creates or edits a card; throws a message for the form
