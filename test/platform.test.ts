@@ -265,8 +265,19 @@ it.skipIf(process.platform !== 'win32')('opens a sign-in console that works from
   mkdirSync(dir, { recursive: true })
   const marker = join(dir, 'ran.txt')
   openWindowsConsole(join(dir, 'login.cmd'), ['echo %ELEFANTE_HOME%> "%ELEFANTE_MARK%"', 'exit'], { ELEFANTE_HOME: dir, ELEFANTE_MARK: marker })
-  for (let i = 0; i < 40 && !existsSync(marker); i++) await new Promise((r) => setTimeout(r, 250))
+  let content = ''
+  for (let i = 0; i < 40; i++) {
+    if (existsSync(marker)) {
+      try {
+        content = readFileSync(marker, 'latin1').trim()
+        if (content.length > 0) break
+      } catch {
+        // marker file might be temporarily locked by cmd.exe while redirecting
+      }
+    }
+    await new Promise((r) => setTimeout(r, 250))
+  }
   expect(existsSync(marker)).toBe(true)
   // The console wrote the folder in its code page; the folder itself was found, accents and all.
-  expect(readFileSync(marker, 'latin1').trim().length).toBeGreaterThan(0)
+  expect(content.length).toBeGreaterThan(0)
 }, 20_000)

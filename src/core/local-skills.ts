@@ -151,13 +151,13 @@ export function findLocalSkills(home = homedir()): LocalSkill[] {
 
   const all = [
     ...inDirs(orcaSkills, 'Orca Skills'),
-    ...inDirs(agentsSkills, 'Orca / Agents Hub'),
     ...inDirs(join(claude, 'skills'), 'Claude Code'),
     ...pluginSkills(claude),
     ...inDirs(join(codex, 'skills'), 'Codex'),
     ...inDirs(geminiSkills, 'Antigravity Skills'),
     ...geminiPluginSkills,
-    ...inDirs(agyBuiltin, 'Antigravity Built-in')
+    ...inDirs(agyBuiltin, 'Antigravity Built-in'),
+    ...inDirs(agentsSkills, 'Orca / Agents Hub')
   ]
   const seen = new Set<string>()
   return all.filter((s) => {

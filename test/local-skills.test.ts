@@ -17,6 +17,7 @@ const put = (path: string, text: string): void => {
 
 let home: string
 let canSymlink = true
+let canJunction = true
 beforeEach(() => {
   home = mkdtempSync(join(tmpdir(), 'ad-home-'))
   put(join(home, '.claude/skills/video/SKILL.md'), '---\nname: video\ndescription: |\n  Cria os vídeos do canal.\n  Use pra "novo vídeo".\n---\n# Vídeos\nLeia estilo.md antes.')
@@ -35,6 +36,13 @@ beforeEach(() => {
   } catch {
     canSymlink = false
   }
+  try {
+    const jTarget = join(home, 'j-target')
+    mkdirSync(jTarget, { recursive: true })
+    symlinkSync(jTarget, join(home, 'j-link'), 'junction')
+  } catch {
+    canJunction = false
+  }
 })
 
 describe('local skills', () => {
@@ -52,13 +60,21 @@ describe('local skills', () => {
   })
 
   it('finds a skill whose folder is a symlink, as the skills CLI leaves it, and skips a broken one', () => {
-    if (!canSymlink) return
+    if (!canJunction) return
     put(join(home, '.agents/skills/grill-me/SKILL.md'), '---\nname: grill-me\ndescription: Entrevista sem piedade\n---\nChame grilling.')
     symlinkSync(join(home, '.agents/skills/grill-me'), join(home, '.claude/skills/grill-me'), 'junction')
     symlinkSync(join(home, '.agents/skills/gone'), join(home, '.claude/skills/gone'), 'junction')
     const found = findLocalSkills(home)
     expect(found.filter((k) => k.origin === 'Claude Code').map((k) => k.name).sort()).toEqual(['grill-me', 'video'])
     expect(found.find((k) => k.name === 'grill-me')?.source).toBe(join(home, '.claude/skills/grill-me/SKILL.md'))
+  })
+
+  it('finds native Orca skills and unlinked Orca / Agents Hub skills', () => {
+    put(join(home, '.orca/skills/orca-browse/SKILL.md'), '---\nname: orca-browse\ndescription: Orca web\n---\nBrowse.')
+    put(join(home, '.agents/skills/hub-tool/SKILL.md'), '---\nname: hub-tool\ndescription: Hub tool\n---\nRun.')
+    const found = findLocalSkills(home)
+    expect(found.find((k) => k.name === 'orca-browse')?.origin).toBe('Orca Skills')
+    expect(found.find((k) => k.name === 'hub-tool')?.origin).toBe('Orca / Agents Hub')
   })
 
   it('reads a linked file only inside the skill folder, following links', () => {
