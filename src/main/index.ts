@@ -71,6 +71,7 @@ type CoreRequest =
   | { type: 'secret'; id: string; op: 'encrypt' | 'decrypt'; data: string }
   | { type: 'open'; url: string }
   | { type: 'open_path'; path: string }
+  | { type: 'reveal_path'; path: string }
   | { type: 'notify'; title: string; body: string; conversationId?: string; kind?: 'approval' | 'question' | 'done' }
   | { type: 'login_item'; open: boolean }
   | { type: 'busy'; busy: boolean }
@@ -188,6 +189,9 @@ function handleCore(child: UtilityProcess, msg: CoreRequest): void {
   } else if (msg.type === 'open_path') {
     const path = normalize(msg.path)
     if (existsSync(path)) void shell.openPath(path)
+  } else if (msg.type === 'reveal_path') {
+    const path = normalize(msg.path)
+    if (existsSync(path)) shell.showItemInFolder(path)
   } else if (msg.type === 'notify') {
     // Already looking at that conversation: nothing to tell.
     if (msg.conversationId && msg.conversationId === viewing && mainWindow?.isFocused()) return

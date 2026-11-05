@@ -245,6 +245,7 @@ const notifyAll = (title: string, body: string, conversationId?: string): void =
 type ToMain =
   | { type: 'open'; url: string }
   | { type: 'open_path'; path: string }
+  | { type: 'reveal_path'; path: string }
   | { type: 'notify'; title: string; body: string; conversationId?: string; kind?: 'approval' | 'question' | 'done' }
   | { type: 'login_item'; open: boolean }
   | { type: 'busy'; busy: boolean }
@@ -789,6 +790,9 @@ const api: Api = {
 
   openFolderPath: ({ path }) => {
     if (path && existsSync(path)) toMain({ type: 'open_path', path })
+  },
+  revealPath: ({ path }) => {
+    if (path && existsSync(path)) toMain({ type: 'reveal_path', path })
   },
 
   ensureTuca: ({ modelId, fresh }) => ensureTuca(modelId, fresh),

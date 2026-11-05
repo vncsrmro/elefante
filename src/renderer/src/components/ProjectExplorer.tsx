@@ -1,7 +1,7 @@
 import { useState, useEffect, useMemo, useRef, type ReactNode } from 'react'
 import { L } from '../../../shared/lang'
 import { call } from '../rpc'
-import { clearActiveEditorFile, openFolderPath, setRightPanelOpen, setRightPanelWidth, navigate, useStore } from '../store'
+import { clearActiveEditorFile, openFolderPath, revealPath, setRightPanelOpen, setRightPanelWidth, navigate, useStore } from '../store'
 import { Icon } from './ui'
 import { CodeHighlight } from './CodeHighlight'
 import type { ProjectFileItem, ProjectFileInfo } from '../../../shared/types'
@@ -23,6 +23,11 @@ export type PanelTab =
       initialContent: string
       isDirty: boolean
       isBinary: boolean
+      size?: number
+      mediaType?: 'image' | 'video' | 'audio' | 'pdf' | 'binary'
+      mimeType?: string
+      hexDump?: string
+      modifiedAt?: number
     }
   | {
       id: string
@@ -52,6 +57,229 @@ export type PanelTab =
       isDirty: boolean
       previewMode: boolean
     }
+
+function formatBytes(bytes?: number): string {
+  if (!bytes || bytes <= 0) return '0 B'
+  const k = 1024
+  const sizes = ['B', 'KB', 'MB', 'GB']
+  const i = Math.floor(Math.log(bytes) / Math.log(k))
+  return `${parseFloat((bytes / Math.pow(k, i)).toFixed(1))} ${sizes[i]}`
+}
+
+function BinaryMediaViewer({
+  tab,
+  onOpenFolder,
+  onReveal
+}: {
+  tab: Extract<PanelTab, { kind: 'file' }>
+  onOpenFolder: (path: string) => void
+  onReveal: (path: string) => void
+}): ReactNode {
+  const [showHex, setShowHex] = useState(false)
+  const [zoomMode, setZoomMode] = useState<'fit' | '100%'>('fit')
+
+  const title = tab.title.toLowerCase()
+  const isImage = tab.mediaType === 'image' || /\.(png|jpe?g|gif|webp|svg|ico|bmp|tiff|avif)$/i.test(title)
+  const isVideo = tab.mediaType === 'video' || /\.(mp4|webm|mov|mkv|avi|ogg)$/i.test(title)
+  const isAudio = tab.mediaType === 'audio' || /\.(mp3|wav|ogg|m4a|aac|flac|wma)$/i.test(title)
+  const isPdf = tab.mediaType === 'pdf' || /\.pdf$/i.test(title)
+
+  if (isImage && tab.content && !showHex) {
+    return (
+      <div className="editor-media-wrapper">
+        <div className={`editor-image-frame ${zoomMode === '100%' ? 'is-actual-size' : ''}`}>
+          <img src={tab.content} alt={tab.title} />
+        </div>
+        <div className="editor-media-meta">
+          <div className="editor-media-meta-left">
+            <span className="editor-media-tag">IMAGEM</span>
+            <span className="editor-media-title">{tab.title}</span>
+            <span className="editor-media-size">{formatBytes(tab.size)}</span>
+          </div>
+          <div className="editor-media-actions">
+            <button
+              className="btn btn--xs"
+              onClick={() => setZoomMode(zoomMode === 'fit' ? '100%' : 'fit')}
+              title={L('Alternar zoom', 'Toggle zoom')}
+            >
+              <Icon name="expand" size={11} />
+              <span>{zoomMode === 'fit' ? '100%' : L('Ajustar', 'Fit')}</span>
+            </button>
+            {tab.hexDump && (
+              <button className="btn btn--xs" onClick={() => setShowHex(true)} title="Ver código hexadecimal">
+                <Icon name="binary" size={11} />
+                <span>HEX</span>
+              </button>
+            )}
+            <button className="btn btn--xs" onClick={() => onOpenFolder(tab.path)} title={L('Abrir no visualizador do sistema', 'Open in system viewer')}>
+              <Icon name="external" size={11} />
+              <span>{L('Abrir no sistema', 'Open in system')}</span>
+            </button>
+            <button className="btn btn--xs" onClick={() => onReveal(tab.path)} title={L('Mostrar no Explorer', 'Show in Explorer')}>
+              <Icon name="folder" size={11} />
+              <span>Explorer</span>
+            </button>
+          </div>
+        </div>
+      </div>
+    )
+  }
+
+  if (isVideo && tab.content && !showHex) {
+    return (
+      <div className="editor-media-wrapper">
+        <div className="editor-video-frame">
+          <video
+            controls
+            autoPlay={false}
+            preload="metadata"
+            src={tab.content}
+            className="editor-video-element"
+          />
+        </div>
+        <div className="editor-media-meta">
+          <div className="editor-media-meta-left">
+            <span className="editor-media-tag editor-media-tag--video">VÍDEO</span>
+            <span className="editor-media-title">{tab.title}</span>
+            <span className="editor-media-size">{formatBytes(tab.size)}</span>
+          </div>
+          <div className="editor-media-actions">
+            {tab.hexDump && (
+              <button className="btn btn--xs" onClick={() => setShowHex(true)}>
+                <Icon name="binary" size={11} />
+                <span>HEX</span>
+              </button>
+            )}
+            <button className="btn btn--xs" onClick={() => onOpenFolder(tab.path)}>
+              <Icon name="external" size={11} />
+              <span>{L('Abrir no player', 'Open in player')}</span>
+            </button>
+            <button className="btn btn--xs" onClick={() => onReveal(tab.path)}>
+              <Icon name="folder" size={11} />
+              <span>Explorer</span>
+            </button>
+          </div>
+        </div>
+      </div>
+    )
+  }
+
+  if (isAudio && tab.content && !showHex) {
+    return (
+      <div className="editor-media-wrapper editor-media-wrapper--audio">
+        <div className="editor-audio-card">
+          <div className="editor-audio-disc">
+            <Icon name="music" size={32} />
+          </div>
+          <div className="editor-audio-info">
+            <div className="editor-audio-title">{tab.title}</div>
+            <div className="editor-audio-sub">{formatBytes(tab.size)} · {tab.mimeType || 'Audio'}</div>
+          </div>
+        </div>
+        <div className="editor-audio-controls">
+          <audio controls preload="metadata" src={tab.content} className="editor-audio-element" />
+        </div>
+        <div className="editor-media-meta">
+          <div className="editor-media-meta-left">
+            <span className="editor-media-tag editor-media-tag--audio">ÁUDIO</span>
+            <span className="editor-media-size">{formatBytes(tab.size)}</span>
+          </div>
+          <div className="editor-media-actions">
+            {tab.hexDump && (
+              <button className="btn btn--xs" onClick={() => setShowHex(true)}>
+                <Icon name="binary" size={11} />
+                <span>HEX</span>
+              </button>
+            )}
+            <button className="btn btn--xs" onClick={() => onOpenFolder(tab.path)}>
+              <Icon name="external" size={11} />
+              <span>{L('Abrir no player', 'Open in player')}</span>
+            </button>
+            <button className="btn btn--xs" onClick={() => onReveal(tab.path)}>
+              <Icon name="folder" size={11} />
+              <span>Explorer</span>
+            </button>
+          </div>
+        </div>
+      </div>
+    )
+  }
+
+  if (isPdf && tab.content && !showHex) {
+    return (
+      <div className="editor-media-wrapper editor-media-wrapper--pdf">
+        <iframe src={tab.content} title={tab.title} className="editor-pdf-frame" />
+        <div className="editor-media-meta">
+          <div className="editor-media-meta-left">
+            <span className="editor-media-tag editor-media-tag--pdf">PDF</span>
+            <span className="editor-media-title">{tab.title}</span>
+            <span className="editor-media-size">{formatBytes(tab.size)}</span>
+          </div>
+          <div className="editor-media-actions">
+            <button className="btn btn--xs" onClick={() => onOpenFolder(tab.path)}>
+              <Icon name="external" size={11} />
+              <span>{L('Abrir no leitor de PDF', 'Open PDF reader')}</span>
+            </button>
+            <button className="btn btn--xs" onClick={() => onReveal(tab.path)}>
+              <Icon name="folder" size={11} />
+              <span>Explorer</span>
+            </button>
+          </div>
+        </div>
+      </div>
+    )
+  }
+
+  // Fallback for general binary or hex inspection
+  return (
+    <div className="editor-binary-preview">
+      <div className="editor-binary-card">
+        <div className="editor-binary-header-row">
+          <div className="editor-binary-icon">
+            <Icon name={isVideo ? 'video' : isAudio ? 'music' : isImage ? 'image' : 'binary'} size={36} />
+          </div>
+          <div className="editor-binary-header-info">
+            <h3 className="editor-binary-title">{tab.title}</h3>
+            <div className="editor-binary-badges">
+              <span className="badge badge--dark">{tab.mimeType || 'binary'}</span>
+              <span className="badge badge--dark">{formatBytes(tab.size)}</span>
+            </div>
+            <p className="editor-binary-path" title={tab.path}>{tab.path}</p>
+          </div>
+        </div>
+
+        <div className="editor-binary-actions">
+          <button className="btn btn--sm btn--primary" onClick={() => onOpenFolder(tab.path)}>
+            <Icon name="external" size={12} />
+            <span>{L('Abrir no aplicativo padrão', 'Open with default app')}</span>
+          </button>
+          <button className="btn btn--sm btn--secondary" onClick={() => onReveal(tab.path)}>
+            <Icon name="folder" size={12} />
+            <span>{L('Mostrar no Explorer', 'Show in Explorer')}</span>
+          </button>
+          {showHex && (
+            <button className="btn btn--sm" onClick={() => setShowHex(false)}>
+              <Icon name="eye" size={12} />
+              <span>{L('Voltar à prévia', 'Back to preview')}</span>
+            </button>
+          )}
+        </div>
+
+        {tab.hexDump && (
+          <div className="editor-hex-section">
+            <div className="editor-hex-header">
+              <span className="editor-hex-title">
+                <Icon name="binary" size={12} />
+                <span>{L('Assinatura Hex (Primeiros 256 bytes)', 'Hex Signature (First 256 bytes)')}</span>
+              </span>
+            </div>
+            <pre className="editor-hex-dump">{tab.hexDump}</pre>
+          </div>
+        )}
+      </div>
+    </div>
+  )
+}
 
 export function ProjectExplorer({ currentProject }: { currentProject?: string }): ReactNode {
   const [folderPath, setFolderPath] = useState<string>(currentProject || '')
@@ -193,7 +421,12 @@ export function ProjectExplorer({ currentProject }: { currentProject?: string })
         content: info.content,
         initialContent: info.content,
         isDirty: false,
-        isBinary: info.isBinary
+        isBinary: info.isBinary,
+        size: info.size,
+        mediaType: info.mediaType,
+        mimeType: info.mimeType,
+        hexDump: info.hexDump,
+        modifiedAt: info.modifiedAt
       }
 
       setTabs((prev) => [...prev, newTab])
@@ -998,35 +1231,11 @@ export function ProjectExplorer({ currentProject }: { currentProject?: string })
           {/* Content Body */}
           <div className="editor-body">
             {activeTab.isBinary ? (
-              <div className="editor-binary-preview">
-                {activeTab.title.match(/\.(png|jpe?g|gif|webp|svg|ico|bmp)$/i) ? (
-                  <div className="editor-image-frame">
-                    <img
-                      src={
-                        activeTab.content && activeTab.content.startsWith('data:')
-                          ? activeTab.content
-                          : `file:///${activeTab.path.replace(/\\/g, '/')}`
-                      }
-                      alt={activeTab.title}
-                    />
-                    <div className="editor-image-meta">
-                      <span>{activeTab.title}</span>
-                      <button className="btn btn--xs" onClick={() => openFolderPath(activeTab.path)}>
-                        <Icon name="external" size={11} />
-                        <span>{L('Abrir no sistema', 'Open in system')}</span>
-                      </button>
-                    </div>
-                  </div>
-                ) : (
-                  <div className="editor-binary-note">
-                    <Icon name="file" size={32} />
-                    <p>{L('Arquivo binário.', 'Binary file.')}</p>
-                    <button className="btn btn--sm" onClick={() => openFolderPath(activeTab.path)}>
-                      {L('Abrir com aplicativo padrão', 'Open with default app')}
-                    </button>
-                  </div>
-                )}
-              </div>
+              <BinaryMediaViewer
+                tab={activeTab}
+                onOpenFolder={openFolderPath}
+                onReveal={revealPath}
+              />
             ) : !editMode ? (
               <div className="terminal-view-wrapper">
                 <CodeHighlight code={activeTab.content} language={activeTab.language} onDoubleClick={() => setEditMode(true)} />

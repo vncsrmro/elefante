@@ -895,6 +895,10 @@ export interface ProjectFileInfo {
   isBinary: boolean
   isFolder?: boolean
   language: string
+  mediaType?: 'image' | 'video' | 'audio' | 'pdf' | 'binary'
+  mimeType?: string
+  hexDump?: string
+  modifiedAt?: number
 }
 
 // ---------- Dynamic Hosts Discovery (Local + Orca + Remote) ----------

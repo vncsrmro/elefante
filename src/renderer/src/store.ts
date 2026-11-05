@@ -427,6 +427,7 @@ export const clearConversationProject = (id: string): Promise<void> =>
   call('setConversationProject', { id, project: null })
 
 export const openFolderPath = (path: string): void => void call('openFolderPath', { path })
+export const revealPath = (path: string): void => void call('revealPath', { path })
 
 // The Tuca and his DM, made if missing.
 export const ensureTuca = (modelId?: string, fresh = false): Promise<{ agentId: string; conversationId: string }> => call('ensureTuca', { modelId, fresh })

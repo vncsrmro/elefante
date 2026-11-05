@@ -1,4 +1,4 @@
-import { existsSync, readdirSync, statSync, readFileSync, writeFileSync } from 'node:fs'
+import { existsSync, readdirSync, statSync, readFileSync, writeFileSync, openSync, readSync, closeSync } from 'node:fs'
 import { join, resolve, basename, extname, relative } from 'node:path'
 import { exec } from 'node:child_process'
 import type { ProjectFileItem, ProjectFileInfo } from '../shared/types'
@@ -71,13 +71,89 @@ function detectLanguage(ext: string): string {
 }
 
 const BINARY_EXTS = new Set([
-  '.png', '.jpg', '.jpeg', '.gif', '.webp', '.ico', '.bmp',
+  '.png', '.jpg', '.jpeg', '.gif', '.webp', '.ico', '.bmp', '.tiff', '.avif',
   '.mp4', '.mov', '.webm', '.avi', '.mkv',
-  '.mp3', '.wav', '.ogg', '.flac',
+  '.mp3', '.wav', '.ogg', '.flac', '.m4a', '.aac', '.wma',
   '.zip', '.tar', '.gz', '.7z', '.rar',
   '.exe', '.dll', '.bin', '.so', '.dylib',
-  '.pdf', '.wasm', '.db', '.sqlite'
+  '.pdf', '.wasm', '.db', '.sqlite', '.iso'
 ])
+
+export function getMimeType(ext: string): string {
+  switch (ext.toLowerCase()) {
+    case '.png': return 'image/png'
+    case '.jpg':
+    case '.jpeg': return 'image/jpeg'
+    case '.gif': return 'image/gif'
+    case '.webp': return 'image/webp'
+    case '.svg': return 'image/svg+xml'
+    case '.ico': return 'image/x-icon'
+    case '.bmp': return 'image/bmp'
+    case '.tiff': return 'image/tiff'
+    case '.avif': return 'image/avif'
+    case '.mp4': return 'video/mp4'
+    case '.webm': return 'video/webm'
+    case '.mov': return 'video/quicktime'
+    case '.mkv': return 'video/x-matroska'
+    case '.avi': return 'video/x-msvideo'
+    case '.ogg': return 'video/ogg'
+    case '.mp3': return 'audio/mpeg'
+    case '.wav': return 'audio/wav'
+    case '.m4a': return 'audio/mp4'
+    case '.aac': return 'audio/aac'
+    case '.flac': return 'audio/flac'
+    case '.wma': return 'audio/x-ms-wma'
+    case '.pdf': return 'application/pdf'
+    case '.zip': return 'application/zip'
+    case '.tar': return 'application/x-tar'
+    case '.gz': return 'application/gzip'
+    case '.7z': return 'application/x-7z-compressed'
+    case '.rar': return 'application/vnd.rar'
+    case '.exe': return 'application/x-msdownload'
+    case '.dll': return 'application/x-msdownload'
+    case '.db':
+    case '.sqlite': return 'application/x-sqlite3'
+    case '.wasm': return 'application/wasm'
+    default: return 'application/octet-stream'
+  }
+}
+
+function generateHexDump(buf: Buffer, maxBytes = 256): string {
+  const slice = buf.subarray(0, maxBytes)
+  const lines: string[] = []
+  for (let i = 0; i < slice.length; i += 16) {
+    const chunk = slice.subarray(i, i + 16)
+    const offset = i.toString(16).padStart(8, '0')
+    const hexParts: string[] = []
+    let ascii = ''
+    for (let j = 0; j < 16; j++) {
+      if (j < chunk.length) {
+        const byte = chunk[j]!
+        hexParts.push(byte.toString(16).padStart(2, '0'))
+        ascii += byte >= 32 && byte <= 126 ? String.fromCharCode(byte) : '.'
+      } else {
+        hexParts.push('  ')
+      }
+    }
+    const hex1 = hexParts.slice(0, 8).join(' ')
+    const hex2 = hexParts.slice(8, 16).join(' ')
+    lines.push(`${offset}  ${hex1}  ${hex2}  |${ascii}|`)
+  }
+  return lines.join('\n')
+}
+
+export function getFileHexDump(filePath: string, maxBytes = 256): string {
+  try {
+    const fd = openSync(filePath, 'r')
+    const buf = Buffer.alloc(maxBytes)
+    const bytesRead = readSync(fd, buf, 0, maxBytes, 0)
+    closeSync(fd)
+    if (bytesRead === 0) return '(Arquivo vazio / 0 bytes)'
+    return generateHexDump(buf.subarray(0, bytesRead))
+  } catch {
+    return '(Visualização hex indisponível)'
+  }
+}
 
 export function listProjectFiles(folderPath: string, maxDepth = 4): { root: string; name: string; files: ProjectFileItem[] } {
   const normRoot = resolve(folderPath)
@@ -165,7 +241,7 @@ export function readProjectFile(filePath: string): ProjectFileInfo {
     }
   }
 
-  const isImage = /\.(png|jpe?g|gif|webp|svg|ico|bmp)$/i.test(ext)
+  const isImage = /\.(png|jpe?g|gif|webp|svg|ico|bmp|tiff|avif)$/i.test(ext)
   if (isImage) {
     try {
       if (ext === '.svg') {
@@ -178,10 +254,14 @@ export function readProjectFile(filePath: string): ProjectFileInfo {
           content: dataUrl,
           size: st.size,
           isBinary: true,
-          language: 'image'
+          mediaType: 'image',
+          mimeType: 'image/svg+xml',
+          hexDump: getFileHexDump(normPath, 256),
+          language: 'image',
+          modifiedAt: st.mtimeMs
         }
       }
-      const mime = ext === '.png' ? 'image/png' : ext === '.gif' ? 'image/gif' : ext === '.webp' ? 'image/webp' : ext === '.ico' ? 'image/x-icon' : ext === '.bmp' ? 'image/bmp' : 'image/jpeg'
+      const mime = getMimeType(ext)
       const b64 = readFileSync(normPath).toString('base64')
       const dataUrl = `data:${mime};base64,${b64}`
       return {
@@ -191,10 +271,94 @@ export function readProjectFile(filePath: string): ProjectFileInfo {
         content: dataUrl,
         size: st.size,
         isBinary: true,
-        language: 'image'
+        mediaType: 'image',
+        mimeType: mime,
+        hexDump: getFileHexDump(normPath, 256),
+        language: 'image',
+        modifiedAt: st.mtimeMs
       }
     } catch {
       // fallback
+    }
+  }
+
+  const isVideo = /\.(mp4|webm|mov|mkv|avi|ogg)$/i.test(ext)
+  if (isVideo) {
+    const mime = getMimeType(ext)
+    let content = ''
+    if (st.size <= 80 * 1024 * 1024) {
+      try {
+        const b64 = readFileSync(normPath).toString('base64')
+        content = `data:${mime};base64,${b64}`
+      } catch {
+        // fallback
+      }
+    }
+    return {
+      path: normPath,
+      relPath: name,
+      name,
+      content,
+      size: st.size,
+      isBinary: true,
+      mediaType: 'video',
+      mimeType: mime,
+      hexDump: getFileHexDump(normPath, 256),
+      language: 'video',
+      modifiedAt: st.mtimeMs
+    }
+  }
+
+  const isAudio = /\.(mp3|wav|ogg|m4a|aac|flac|wma)$/i.test(ext)
+  if (isAudio) {
+    const mime = getMimeType(ext)
+    let content = ''
+    if (st.size <= 80 * 1024 * 1024) {
+      try {
+        const b64 = readFileSync(normPath).toString('base64')
+        content = `data:${mime};base64,${b64}`
+      } catch {
+        // fallback
+      }
+    }
+    return {
+      path: normPath,
+      relPath: name,
+      name,
+      content,
+      size: st.size,
+      isBinary: true,
+      mediaType: 'audio',
+      mimeType: mime,
+      hexDump: getFileHexDump(normPath, 256),
+      language: 'audio',
+      modifiedAt: st.mtimeMs
+    }
+  }
+
+  const isPdf = ext === '.pdf'
+  if (isPdf) {
+    let content = ''
+    if (st.size <= 40 * 1024 * 1024) {
+      try {
+        const b64 = readFileSync(normPath).toString('base64')
+        content = `data:application/pdf;base64,${b64}`
+      } catch {
+        // fallback
+      }
+    }
+    return {
+      path: normPath,
+      relPath: name,
+      name,
+      content,
+      size: st.size,
+      isBinary: true,
+      mediaType: 'pdf',
+      mimeType: 'application/pdf',
+      hexDump: getFileHexDump(normPath, 256),
+      language: 'pdf',
+      modifiedAt: st.mtimeMs
     }
   }
 
@@ -208,7 +372,11 @@ export function readProjectFile(filePath: string): ProjectFileInfo {
       content: '',
       size: st.size,
       isBinary: true,
-      language: detectLanguage(ext)
+      mediaType: 'binary',
+      mimeType: getMimeType(ext),
+      hexDump: getFileHexDump(normPath, 256),
+      language: detectLanguage(ext),
+      modifiedAt: st.mtimeMs
     }
   }
 
@@ -222,7 +390,8 @@ export function readProjectFile(filePath: string): ProjectFileInfo {
       content: raw + '\n\n... [Arquivo grande truncado para performance]',
       size: st.size,
       isBinary: false,
-      language: detectLanguage(ext)
+      language: detectLanguage(ext),
+      modifiedAt: st.mtimeMs
     }
   }
 
@@ -234,7 +403,8 @@ export function readProjectFile(filePath: string): ProjectFileInfo {
     content,
     size: st.size,
     isBinary: false,
-    language: detectLanguage(ext)
+    language: detectLanguage(ext),
+    modifiedAt: st.mtimeMs
   }
 }
 

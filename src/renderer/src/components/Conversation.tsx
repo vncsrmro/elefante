@@ -753,12 +753,11 @@ function RunTodos({ todos }: { todos: TodoItem[] }): ReactNode {
 }
 
 // One quiet line: what the agent is doing now (and for how long), or how many
-// steps it took. The steps themselves open on a click, or automatically while working.
+// steps it took. Stays in a single line updating in real time, and opens only on click.
 function RunSteps({ message }: { message: Message }): ReactNode {
   const run = message.run!
   const working = run.status === 'working'
-  const [manuallyToggled, setManuallyToggled] = useState<boolean | null>(null)
-  const open = manuallyToggled !== null ? manuallyToggled : working
+  const [open, setOpen] = useState(false)
   const now = useNow(working)
 
   if (run.steps.length === 0 && !working) return null
@@ -768,14 +767,11 @@ function RunSteps({ message }: { message: Message }): ReactNode {
 
   return (
     <div className={`steps ${open ? 'is-open' : ''} ${working ? 'is-working' : ''}`}>
-      <button className="steps__toggle" onClick={() => setManuallyToggled(!open)} type="button">
-        {working ? (
-          <span className="steps__pulse" />
-        ) : (
-          <span className="steps__chev">
-            <Icon name="chevron" size={12} />
-          </span>
-        )}
+      <button className="steps__toggle" onClick={() => setOpen(!open)} type="button">
+        <span className="steps__chev">
+          <Icon name="chevron" size={12} />
+        </span>
+        {working && <span className="steps__pulse" />}
         {working ? (
           <span className="steps__working-label shimmer">
             <span className="steps__working-title">{current ? current.label : L('Pensando…', 'Thinking…')}</span>

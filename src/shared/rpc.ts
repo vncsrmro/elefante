@@ -32,6 +32,7 @@ export interface Api {
   createProject(p: { path: string; name?: string }): string
   setConversationProject(p: { id: string; project: string | null }): void
   openFolderPath(p: { path: string }): void
+  revealPath(p: { path: string }): void
   renameChannel(p: { id: string; name: string }): void // throws a message when the name is taken
   archiveAgent(p: { id: string; archived: boolean }): void // out of the sidebar, its replies stopped and routines off; back with archived: false
   setTopic(p: { id: string; topic: string }): void
