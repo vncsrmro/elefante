@@ -4723,6 +4723,17 @@ kbd {
   color: var(--text-2);
   font-size: 15px;
 }
+.usage-month__quota {
+  width: min(360px, 100%);
+  margin-top: 10px;
+}
+.usage-month__quota .usage-meter {
+  height: 7px;
+}
+.usage-month__quota > span {
+  display: block;
+  margin-top: 5px;
+}
 .usage-delta {
   display: inline-flex;
   align-items: center;
@@ -8140,6 +8151,12 @@ select:focus {
   overflow-x: auto;
   scrollbar-width: none;
 }
+
+.status-usage-popover { position: fixed; left: 10px; bottom: 34px; z-index: 1000; width: 320px; padding: 14px; border: 1px solid var(--border); border-radius: 10px; background: var(--panel); box-shadow: 0 8px 30px #0008; color: var(--text); font-size: 12px; }
+.status-usage-popover p { margin: 12px 0 4px; color: var(--text-2); font-weight: 600; }
+.status-usage-popover__head { display: flex; justify-content: space-between; align-items: center; }
+.status-usage-popover__head button, .status-usage-popover__link { border: 0; background: transparent; color: inherit; cursor: pointer; }
+.status-usage-popover__link { display: block; margin-top: 14px; padding: 8px 0 0; width: 100%; border-top: 1px solid var(--border); text-align: left; }
 .status-bar__section--left::-webkit-scrollbar {
   display: none;
 }
@@ -8180,6 +8197,44 @@ select:focus {
   background: var(--accent-soft);
   color: var(--text);
 }
+.status-bar__usage {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.status-bar__usage strong,
+.status-bar__usage-pct {
+  font-variant-numeric: tabular-nums;
+}
+.status-bar__usage-pct {
+  color: var(--text-2);
+  min-width: 30px;
+  text-align: right;
+}
+.status-bar__usage-track {
+  width: 56px;
+  height: 5px;
+  overflow: hidden;
+  border-radius: 99px;
+  background: var(--border-strong);
+}
+.status-bar__usage-track i {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: var(--accent);
+}
+
+  .status-bar__quota {
+    display: inline-flex;
+    align-items: center;
+    padding-left: 7px;
+    border-left: 1px solid var(--border);
+    color: var(--text-2);
+    font-size: 10px;
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+  }
 
 .status-bar__dot {
   width: 6px;
