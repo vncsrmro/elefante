@@ -1,3 +1,4 @@
+import { ProviderMark } from './ProviderMark'
 import { useState, useEffect, useRef, type ReactNode } from 'react'
 import { L } from '../../../shared/lang'
 import { isTeam, navigate, toggleRightPanel, updateSettings, useStore, type State } from '../store'
@@ -130,10 +131,14 @@ export function StatusBar(): ReactNode {
             <div className="status-usage-popover__head"><strong>{L('Uso', 'Usage')}</strong><button onClick={() => setUsageOpen(false)} aria-label={L('Fechar', 'Close')}>×</button></div>
             <p>{L('Limites internos do Elefante', 'Elefante internal limits')}</p>
             <div>{formatTokens(totalTokens)} / {formatTokens(teamLimit)} · {usedPct === undefined ? '—' : `${Math.round(usedPct * 100)}%`}</div>
-            <p>Codex</p>
+            <p className="provider-heading"><ProviderMark model="codex" size={24} />Codex <span className="provider-subtitle">OpenAI</span></p>
+            {[codexQuota?.primary, codexQuota?.secondary].map((window, index) => window && <div className="quota-window" key={index}>
+              <div className="quota-window__label"><span>{window.windowDurationMins ? window.windowDurationMins >= 1440 ? `${window.windowDurationMins / 1440} ${L('dias', 'days')}` : `${window.windowDurationMins / 60}h` : L('Janela de uso', 'Usage window')}</span><strong>{Math.round(Math.max(0, 100 - window.usedPercent))}% {L('restante', 'remaining')}</strong></div>
+              <meter min={0} max={100} value={Math.max(0, 100 - window.usedPercent)} aria-label={L('Quota restante', 'Remaining quota')} />
+            </div>)}
             <div className="muted">{codexQuota?.primary ? `${codexQuota.primary.usedPercent}% ${L('usado', 'used')}${codexQuota.primary.resetsAt ? ` · ${resetIn(codexQuota.primary.resetsAt * 1000)}` : ''}` : L('Quota indisponível.', 'Quota unavailable.')}</div>
             {codexQuota?.secondary && <div className="muted">{codexQuota.secondary.usedPercent}% {L('usado', 'used')}{codexQuota.secondary.resetsAt ? ` · ${resetIn(codexQuota.secondary.resetsAt * 1000)}` : ''}</div>}
-            <p>Claude</p>
+            <p className="provider-heading"><ProviderMark model="claude" size={24} />Claude <span className="provider-subtitle">Anthropic</span></p>
             <div className="muted">{quota?.fiveHour ? `${Math.round(quota.fiveHour.utilization * 100)}% ${L('usado', 'used')} · ${resetIn(quota.fiveHour.resetsAt)}` : L('Quota ainda não informada.', 'No quota reported yet.')}</div>
             <button className="status-usage-popover__link" onClick={() => { setUsageOpen(false); navigate({ kind: 'usage' }) }}>{L('Detalhes e histórico de uso →', 'Usage details and history →')}</button>
           </div>

@@ -1,3 +1,4 @@
+import { ProviderMark } from './ProviderMark'
 import { L } from '../../../shared/lang'
 import { CODE_SPANS } from '../../../shared/types'
 import { createContext, useContext, useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react'
@@ -1002,7 +1003,7 @@ function ReceiptLine({ receipt }: { receipt: NonNullable<NonNullable<Message['ru
   return (
     <div className="receipt">
       <button className="receipt__line" onClick={() => setOpen(!open)} title={L('Ver recibo', 'See receipt')}>
-        {model?.label ?? receipt.model} · {tokens(total)} tokens · {duration(receipt.ms)}
+        <ProviderMark model={receipt.model} size={16} /> {model?.label ?? receipt.model} · {tokens(total)} tokens · {duration(receipt.ms)}
       </button>
       {open && (
         <dl className="receipt__table">

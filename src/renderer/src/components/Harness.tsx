@@ -1,3 +1,4 @@
+import { ProviderMark } from './ProviderMark'
 // The harnesses agents run on (Claude Code, Codex, OpenCode, Pi), each used
 // as the person set it up: their plan, their company's gateway or the
 // providers they have logins for. Here they pick which ones the agents use,
@@ -113,7 +114,7 @@ export function ModelPicker({ value, onChange, engines, jev }: { value: string; 
   const fixed = engines?.length === 1 && !jev
   if (!engine && !jev) return <p className="hint hint--warn">{L('Nenhum harness pronto. Veja em Configurações → Modelos.', 'No harness ready. See Settings → Models.')}</p>
   return (
-    <div className="model-picker">
+    <div className="model-picker"><ProviderMark model={value || engine || 'api'} size={24} />
       {!fixed && (
         <select
           value={value === 'jev' ? 'jev' : engine}
@@ -226,7 +227,7 @@ function HarnessRow({ engine, st, picked, toggle }: { engine: EngineId; st: Engi
           {picked && <Icon name="check" size={12} />}
         </button>
         <div className="grow">
-          <strong>{ENGINES[engine].label}</strong>
+          <strong className="provider-heading"><ProviderMark model={engine} size={26} />{ENGINES[engine].label}</strong>
           <span className="harness__account">
             {!st.installed ? L('Não instalado', 'Not installed') : st.account ?? (st.loggedIn ? L('Pronto', 'Ready') : L('Falta entrar', 'Not signed in'))}
           </span>
@@ -552,7 +553,7 @@ function ApiProviderCard({ preset, config }: { preset: PresetInfo; config?: ApiP
       if (r.error || !r.models.length) {
         setStatusMsg({ ok: false, text: r.error || L('Nenhum modelo retornado pelo endpoint.', 'No models returned by endpoint.') })
       } else {
-        const merged = [...new Set([...models, ...r.models.slice(0, 25)])]
+        const merged = [...new Set([...models, ...r.models])]
         setModels(merged)
         await save(true, merged)
         setStatusMsg({ ok: true, text: L(`${r.models.length} modelos detectados e sincronizados!`, `${r.models.length} models detected and synced!`) })

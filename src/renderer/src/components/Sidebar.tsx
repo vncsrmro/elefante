@@ -143,6 +143,7 @@ export function Sidebar(): ReactNode {
   return (
     <aside className="sidebar">
       <div className="sidebar__drag" />
+      <div className="elefante-brand"><TucaMark size={30} /><div><strong>Elefante</strong><small>{L('Seu time de IA', 'Your AI team')}</small></div></div>
 
       {/* Orca-style ultra-clean top bar */}
       <div className="orca-header">
