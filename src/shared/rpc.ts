@@ -96,6 +96,7 @@ export interface Api {
   openBackups(): void
   report(p: { week?: number }): Report // the calendar week starting at `week` (a Monday); this one by default
   usage(): UsageReport
+  codexQuota(): Promise<{ primary?: { usedPercent: number; resetsAt: number | null; windowDurationMins: number | null }; secondary?: { usedPercent: number; resetsAt: number | null; windowDurationMins: number | null }; at: number } | null>
   setGithubToken(p: { token: string | null }): Promise<void> // checked with GitHub; throws why it's refused
   saveApiProvider(p: { id: ApiProviderId; enabled: boolean; baseUrl: string; models: string[]; apiKey?: string | null }): Promise<{ ok: boolean; models: string[]; error?: string }>
   fetchProviderModels(p: { id: ApiProviderId; baseUrl?: string; apiKey?: string }): Promise<{ models: string[]; error?: string }>

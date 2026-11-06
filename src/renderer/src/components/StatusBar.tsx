@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, type ReactNode } from 'react'
 import { L } from '../../../shared/lang'
-import { navigate, toggleRightPanel, updateSettings, useStore, type State } from '../store'
+import { isTeam, navigate, toggleRightPanel, updateSettings, useStore, type State } from '../store'
 import { call } from '../rpc'
 import { Icon } from './ui'
 import type { CloudCliInfo, HostDiscoveryResult, UsageReport } from '../../../shared/types'
@@ -12,13 +12,25 @@ export function StatusBar(): ReactNode {
   const engines = useStore((s) => s.settings.engines)
   const rtkEnabled = useStore((s) => s.settings.rtkEnabled !== false)
   const apiProviders = useStore((s) => s.settings.apiProviders)
+  const quota = useStore((s) => s.settings.quota)
+  const receiptCount = useStore((s) => s.messages.reduce((n, m) => n + (m.run?.receipt ? 1 : 0), 0))
   const hasDeepSeek = !!(apiProviders?.deepseek?.hasKey || apiProviders?.deepseek?.enabled)
   const [clis, setClis] = useState<CloudCliInfo[]>([])
   const [usageData, setUsageData] = useState<UsageReport | null>(null)
   const [hostsData, setHostsData] = useState<HostDiscoveryResult | null>(null)
   const [hostsOpen, setHostsOpen] = useState(false)
+  const [usageOpen, setUsageOpen] = useState(false)
+  const [codexQuota, setCodexQuota] = useState<Awaited<ReturnType<typeof getCodexQuota>>>(null)
   const [refreshingHosts, setRefreshingHosts] = useState(false)
   const hostsRef = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    let cancelled = false
+    const refresh = (): void => { void getCodexQuota().then((q) => { if (!cancelled) setCodexQuota(q) }).catch(() => { if (!cancelled) setCodexQuota(null) }) }
+    refresh()
+    const timer = setInterval(refresh, 300000)
+    return () => { cancelled = true; clearInterval(timer) }
+  }, [receiptCount])
 
   // Fetch active CLIs count, usage summary, and dynamic host discovery
   useEffect(() => {
@@ -35,7 +47,7 @@ export function StatusBar(): ReactNode {
     return () => {
       cancel = true
     }
-  }, [])
+  }, [receiptCount])
 
   // Close hosts popover on click outside
   useEffect(() => {
@@ -67,11 +79,21 @@ export function StatusBar(): ReactNode {
   // Calculate total tokens used today or from report
   const totalTokens = usageData?.total ?? 0
   const totalCostUsd = usageData?.apiUsd ?? 0
+  const teamLimit = useStore((s) => s.agents.filter(isTeam).reduce((sum, a) => sum + a.limit, 0))
+  const usedPct = teamLimit > 0 ? Math.min(1, totalTokens / teamLimit) : undefined
 
   const formatTokens = (tokens: number): string => {
     if (tokens < 1000) return `${tokens}`
     if (tokens < 1000000) return `${(tokens / 1000).toFixed(1)}k`
     return `${(tokens / 1000000).toFixed(2)}M`
+  }
+
+  const resetIn = (at: number): string => {
+    const minutes = Math.max(0, Math.round((at - Date.now()) / 60000))
+    const hours = Math.floor(minutes / 60)
+    const days = Math.floor(hours / 24)
+    if (days) return `${days}d ${hours % 24}h`
+    return `${hours}h ${minutes % 60}m`
   }
 
   // Active harnesses
@@ -86,14 +108,36 @@ export function StatusBar(): ReactNode {
         {/* Token Usage Badge */}
         <button
           className="status-bar__item status-bar__item--clickable"
-          onClick={() => navigate({ kind: 'usage' })}
-          title={L('Ver Uso e limites detalhados do time', 'View detailed usage and limits')}
+          onClick={() => setUsageOpen((v) => !v)}
+          aria-expanded={usageOpen}
+          title={L('Abrir resumo de uso', 'Open usage summary')}
         >
           <span className="status-bar__dot status-bar__dot--green" />
-          <span className="status-bar__label">{L('Usado', 'Used')}:</span>
-          <strong>{formatTokens(totalTokens)} tokens</strong>
+          <span className="status-bar__usage">
+            <span className="status-bar__label">{L('Uso', 'Usage')}</span>
+            <strong>{formatTokens(totalTokens)}{teamLimit > 0 ? ` / ${formatTokens(teamLimit)}` : ''}</strong>
+            {usedPct !== undefined && <span className="status-bar__usage-pct">{Math.round(usedPct * 100)}%</span>}
+            {usedPct !== undefined && <span className="status-bar__usage-track"><i style={{ width: `${usedPct * 100}%` }} /></span>}
+          </span>
+          {codexQuota?.primary && <span className="status-bar__quota">Codex {Math.round(Math.max(0, 100 - codexQuota.primary.usedPercent))}% {L('restante', 'remaining')}</span>}
+          {quota?.fiveHour && <span className="status-bar__quota">Claude 5h {Math.round((1 - quota.fiveHour.utilization) * 100)}% {resetIn(quota.fiveHour.resetsAt)}</span>}
+          {quota?.sevenDay && <span className="status-bar__quota">Claude 7d {Math.round((1 - quota.sevenDay.utilization) * 100)}% {resetIn(quota.sevenDay.resetsAt)}</span>}
           {totalCostUsd > 0 && <span className="muted small">(${totalCostUsd.toFixed(2)})</span>}
         </button>
+
+        {usageOpen && (
+          <div className="status-usage-popover" role="dialog" aria-label={L('Resumo de uso', 'Usage summary')}>
+            <div className="status-usage-popover__head"><strong>{L('Uso', 'Usage')}</strong><button onClick={() => setUsageOpen(false)} aria-label={L('Fechar', 'Close')}>×</button></div>
+            <p>{L('Limites internos do Elefante', 'Elefante internal limits')}</p>
+            <div>{formatTokens(totalTokens)} / {formatTokens(teamLimit)} · {usedPct === undefined ? '—' : `${Math.round(usedPct * 100)}%`}</div>
+            <p>Codex</p>
+            <div className="muted">{codexQuota?.primary ? `${codexQuota.primary.usedPercent}% ${L('usado', 'used')}${codexQuota.primary.resetsAt ? ` · ${resetIn(codexQuota.primary.resetsAt * 1000)}` : ''}` : L('Quota indisponível.', 'Quota unavailable.')}</div>
+            {codexQuota?.secondary && <div className="muted">{codexQuota.secondary.usedPercent}% {L('usado', 'used')}{codexQuota.secondary.resetsAt ? ` · ${resetIn(codexQuota.secondary.resetsAt * 1000)}` : ''}</div>}
+            <p>Claude</p>
+            <div className="muted">{quota?.fiveHour ? `${Math.round(quota.fiveHour.utilization * 100)}% ${L('usado', 'used')} · ${resetIn(quota.fiveHour.resetsAt)}` : L('Quota ainda não informada.', 'No quota reported yet.')}</div>
+            <button className="status-usage-popover__link" onClick={() => { setUsageOpen(false); navigate({ kind: 'usage' }) }}>{L('Detalhes e histórico de uso →', 'Usage details and history →')}</button>
+          </div>
+        )}
 
         <span className="status-bar__divider" />
 
@@ -285,3 +329,5 @@ export function StatusBar(): ReactNode {
     </footer>
   )
 }
+
+function getCodexQuota() { return call('codexQuota') }

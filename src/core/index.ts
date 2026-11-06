@@ -32,6 +32,7 @@ import { checkJevKey, JEV_MODEL, JEV_SECRET } from './jev'
 import { GitHub } from './github'
 import { report } from './report'
 import { usage } from './usage'
+import { readCodexQuota } from './codex-quota'
 import { Skills } from './skills'
 import { backup, backupIfDue, exportTeam, importTeam, purgeLegacyBackups } from './team'
 import { Telegram } from './telegram'
@@ -877,6 +878,7 @@ const api: Api = {
   },
   report: ({ week }) => report(db, Date.now(), week),
   usage: () => usage(db),
+  codexQuota: () => engines.codex.path ? readCodexQuota(engines.codex.path, codexHome) : Promise.resolve(null),
   unpairTelegram: () => void telegram?.unpair(),
 
   // Checked with TypeSafe before it's saved; null removes it.
