@@ -58,7 +58,7 @@ import {
 import { HarnessList, HarnessMcps, ModelPicker, onGateway, OutsideGateway } from './Harness'
 import { AppsCard } from './Apps'
 import { ApprovalCard } from './Conversation'
-import { AgentAvatar, Icon, NumberInput, SleepingElephant, time, tokens, UsageBar } from './ui'
+import { AgentAvatar, Icon, NumberInput, SleepingElephant, time, tokens } from './ui'
 import { UpdateSettings } from './Update'
 import { OneInboxContent } from './OneInbox'
 
@@ -586,7 +586,7 @@ export function AgentPage({ id, draft: proposed, fromMessage }: { id?: string; d
                     ))}
                   </select>
                 </Field>
-                <Field label={L('Limite mensal (milhões de tokens)', 'Monthly limit (millions of tokens)')} hint={L(`Conferido antes de cada turno. No limite, ${draft.name || 'o agente'} para e avisa.`, `Checked before every turn. At the limit, ${draft.name || 'the agent'} stops and tells you.`)}>
+                <details className="usage-advanced"><summary>{L('Controle avançado de execução', 'Advanced execution control')}</summary><Field label={L('Teto interno mensal (milhões de tokens)', 'Internal monthly cap (millions of tokens)')} hint={L(`Conferido antes de cada turno. No limite, ${draft.name || 'o agente'} para e avisa.`, `Checked before every turn. At the limit, ${draft.name || 'the agent'} stops and tells you.`)}>
                   <NumberInput
                     min={0}
                     step={0.5}
@@ -594,7 +594,7 @@ export function AgentPage({ id, draft: proposed, fromMessage }: { id?: string; d
                     onChange={(n) => patch({ limit: Math.max(0, Math.round(n * 1_000_000)) })}
                     className="input--short"
                   />
-                </Field>
+                </Field></details>
               </div>
             </Card>
           )}
@@ -628,9 +628,8 @@ export function AgentPage({ id, draft: proposed, fromMessage }: { id?: string; d
               <div className="profile-card__budget">
                 <span className="muted small">{L('Uso em', 'Usage in')} {new Date().toLocaleDateString(locale(), { month: 'long' })}</span>
                 <span>
-                  <strong>{tokens(draft.used)}</strong> <span className="muted">{L(`de ${tokens(draft.limit)} tokens`, `of ${tokens(draft.limit)} tokens`)}</span>
+                  <strong>{tokens(draft.used)}</strong> <span className="muted">tokens</span>
                 </span>
-                <UsageBar used={draft.used} limit={draft.limit} />
               </div>
             )}
           </div>

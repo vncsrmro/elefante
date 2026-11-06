@@ -1,7 +1,7 @@
 import { ProviderMark } from './ProviderMark'
 import { useState, useEffect, useRef, type ReactNode } from 'react'
 import { L } from '../../../shared/lang'
-import { isTeam, navigate, toggleRightPanel, updateSettings, useStore, type State } from '../store'
+import { navigate, toggleRightPanel, updateSettings, useStore, type State } from '../store'
 import { call } from '../rpc'
 import { Icon } from './ui'
 import type { CloudCliInfo, HostDiscoveryResult, UsageReport } from '../../../shared/types'
@@ -80,8 +80,6 @@ export function StatusBar(): ReactNode {
   // Calculate total tokens used today or from report
   const totalTokens = usageData?.total ?? 0
   const totalCostUsd = usageData?.apiUsd ?? 0
-  const teamLimit = useStore((s) => s.agents.filter(isTeam).reduce((sum, a) => sum + a.limit, 0))
-  const usedPct = teamLimit > 0 ? Math.min(1, totalTokens / teamLimit) : undefined
 
   const formatTokens = (tokens: number): string => {
     if (tokens < 1000) return `${tokens}`
@@ -116,9 +114,7 @@ export function StatusBar(): ReactNode {
           <span className="status-bar__dot status-bar__dot--green" />
           <span className="status-bar__usage">
             <span className="status-bar__label">{L('Uso', 'Usage')}</span>
-            <strong>{formatTokens(totalTokens)}{teamLimit > 0 ? ` / ${formatTokens(teamLimit)}` : ''}</strong>
-            {usedPct !== undefined && <span className="status-bar__usage-pct">{Math.round(usedPct * 100)}%</span>}
-            {usedPct !== undefined && <span className="status-bar__usage-track"><i style={{ width: `${usedPct * 100}%` }} /></span>}
+            <strong>{formatTokens(totalTokens)} {L('tokens no mês', 'tokens this month')}</strong>
           </span>
           {codexQuota?.primary && <span className="status-bar__quota">Codex {Math.round(Math.max(0, 100 - codexQuota.primary.usedPercent))}% {L('restante', 'remaining')}</span>}
           {quota?.fiveHour && <span className="status-bar__quota">Claude 5h {Math.round((1 - quota.fiveHour.utilization) * 100)}% {resetIn(quota.fiveHour.resetsAt)}</span>}
@@ -129,8 +125,8 @@ export function StatusBar(): ReactNode {
         {usageOpen && (
           <div className="status-usage-popover" role="dialog" aria-label={L('Resumo de uso', 'Usage summary')}>
             <div className="status-usage-popover__head"><strong>{L('Uso', 'Usage')}</strong><button onClick={() => setUsageOpen(false)} aria-label={L('Fechar', 'Close')}>×</button></div>
-            <p>{L('Limites internos do Elefante', 'Elefante internal limits')}</p>
-            <div>{formatTokens(totalTokens)} / {formatTokens(teamLimit)} · {usedPct === undefined ? '—' : `${Math.round(usedPct * 100)}%`}</div>
+            <p>{L('Consumo registrado no mês', 'Recorded usage this month')}</p>
+            <div>{formatTokens(totalTokens)} tokens · {usageData?.replies ?? 0} {L('respostas', 'replies')}</div>
             <p className="provider-heading"><ProviderMark model="codex" size={24} />Codex <span className="provider-subtitle">OpenAI</span></p>
             {[codexQuota?.primary, codexQuota?.secondary].map((window, index) => window && <div className="quota-window" key={index}>
               <div className="quota-window__label"><span>{window.windowDurationMins ? window.windowDurationMins >= 1440 ? `${window.windowDurationMins / 1440} ${L('dias', 'days')}` : `${window.windowDurationMins / 60}h` : L('Janela de uso', 'Usage window')}</span><strong>{Math.round(Math.max(0, 100 - window.usedPercent))}% {L('restante', 'remaining')}</strong></div>

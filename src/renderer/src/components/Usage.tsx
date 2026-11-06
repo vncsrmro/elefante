@@ -74,11 +74,12 @@ export function UsagePage(): ReactNode {
   )
 
   return (
-    <Sheet wide title={L('Uso e limites', 'Usage and limits')} lede={subtitle}>
+    <Sheet wide title={L('Consumo', 'Usage')} lede={subtitle}>
       {!u ? (
         <p className="read-empty">{L('Calculando…', 'Crunching…')}</p>
       ) : (
         <>
+          <p className="muted small">{L('Tokens contabilizados pelo Elefante: entrada e saída, com leituras de cache contadas a 10%. Não representam o saldo da assinatura.', 'Elefante counted tokens: input and output, with cache reads weighted at 10%. These do not represent your subscription balance.')}</p>
           <Month u={u} claude={billing.find((b) => b.id === 'claude')?.status} />
           {billing.find((b) => b.id === 'claude')?.status.route === 'plan' && <Quota />}
           <Agents u={u} />
@@ -127,6 +128,7 @@ function Month({ u, claude }: { u: UsageReport; claude?: EngineStatus }): ReactN
             <strong>{tokens(u.total)}</strong>
             <span>tokens</span>
           </div>
+
           <span className="muted small">
             {delta === undefined ? (
               L('O primeiro mês com uso registrado.', 'The first month with recorded usage.')
@@ -266,71 +268,25 @@ function Ring({ label, w }: { label: string; w: { utilization: number; resetsAt:
 // ---------- agents and their limits ----------
 
 function Agents({ u }: { u: UsageReport }): ReactNode {
-  const agents = useStore((s) => s.agents.filter((a) => isTeam(a)))
-  if (agents.length === 0) return null
-  const elapsed = Math.max(0, (Date.now() - u.monthStart) / DAY)
-  const sorted = [...agents].sort((a, b) => b.used - a.used)
-  return (
-    <section className="read-group">
-      <h2>
-        {L('Por agente', 'By agent')}<span>{L('O limite do mês, conferido antes de cada resposta. A parte clara é onde o ritmo atual leva.', 'The monthly limit, checked before every reply. The light part is where the current pace leads.')}</span>
-      </h2>
-      <div className="usage-agents">
-        {sorted.map((a) => (
-          <AgentRow key={a.id} agent={a} stats={u.who.find((w) => w.id === a.id)} elapsed={elapsed} daysInMonth={u.daysInMonth} monthStart={u.monthStart} />
-        ))}
-      </div>
-    </section>
-  )
-}
-
-function AgentRow({ agent: a, stats, elapsed, daysInMonth, monthStart }: { agent: Agent; stats?: UsageReport['who'][number]; elapsed: number; daysInMonth: number; monthStart: number }): ReactNode {
-  const model = modelInfo(a.modelId)
-  const pct = a.limit > 0 ? a.used / a.limit : 1
-  // The pace only means something after a couple of days.
-  const pace = elapsed >= 2 ? a.used / elapsed : undefined
-  const projected = pace !== undefined ? pace * daysInMonth : undefined
-  const projPct = projected !== undefined && a.limit > 0 ? projected / a.limit : undefined
-  const hitsOn = pace && a.limit > a.used ? new Date(monthStart + (a.limit / pace) * DAY) : undefined
-
-  let status: ReactNode
-  let tone = ''
-  if (a.used >= a.limit) {
-    status = L('Bateu o limite: parado até o mês virar ou você subir o limite', 'Hit the limit: stopped until the month turns or you raise the limit')
-    tone = 'is-danger'
-  } else if (projPct !== undefined && projPct >= 1 && hitsOn) {
-    status = L(`No ritmo, bate o limite dia ${hitsOn.getDate()}`, `At this pace, hits the limit on the ${ordinal(hitsOn.getDate())}`)
-    tone = 'is-warn'
-  } else if (projPct !== undefined && a.used > 0) {
-    status = L(`No ritmo, fecha o mês em ${percent(projPct)}`, `At this pace, ends the month at ${percent(projPct)}`)
-  } else {
-    status = a.used > 0 ? L('Começou agora a usar', 'Just started using it') : L('Sem uso este mês', 'No usage this month')
-  }
-
-  return (
-    <button className={`usage-agent ${tone}`} onClick={() => navigate({ kind: 'agent', id: a.id })}>
-      <AgentAvatar agent={a} size={30} />
-      <span className="usage-agent__who">
-        <strong>{a.name}</strong>
-        <span className="muted small truncate">
-          {model ? `${ENGINES[model.engine].label} · ${model.label}` : a.modelId}
-          {stats?.replies ? ` · ${stats.replies} ${stats.replies === 1 ? L('resposta', 'reply') : L('respostas', 'replies')}` : ''}
-        </span>
-      </span>
-      <span className="usage-agent__meter">
-        <span className="usage-meter">
-          {projPct !== undefined && projPct > pct && <span className="usage-meter__proj" style={{ width: `${Math.min(100, projPct * 100)}%` }} />}
-          <span className="usage-meter__fill" style={{ width: `${Math.min(100, pct * 100)}%` }} />
-        </span>
-        <span className={`usage-agent__status small ${tone}`}>{status}</span>
-      </span>
-      <span className="usage-agent__nums">
-        <strong>{tokens(a.used)}</strong>
-        <span className="muted small">{L('de', 'of')} {tokens(a.limit)} · {percent(pct)}</span>
-      </span>
-      <Icon name="chevron" size={14} />
-    </button>
-  )
+  const agents = useStore((s) => s.agents.filter(isTeam))
+  const stats = new Map(u.who.map(w => [w.id, w]))
+  const total = agents.reduce((sum, a) => sum + (stats.get(a.id)?.tokens ?? 0), 0)
+  const sorted = [...agents].sort((a, b) => (stats.get(b.id)?.tokens ?? 0) - (stats.get(a.id)?.tokens ?? 0))
+  if (!agents.length) return null
+  return <section className="read-group"><h2>{L('Por agente', 'By agent')}<span>{L('Consumo registrado neste mês. As barras mostram a participação no uso do time.', 'Recorded usage this month. Bars show each agent’s share of team usage.')}</span></h2>
+    <div className="usage-agents">{sorted.map(a => {
+      const row = stats.get(a.id)
+      const used = row?.tokens ?? 0
+      const share = total > 0 ? used / total : 0
+      const model = modelInfo(a.modelId)
+      return <button className="usage-agent" key={a.id} onClick={() => navigate({ kind: 'agent', id: a.id })}>
+        <AgentAvatar agent={a} size={30} />
+        <span className="usage-agent__who"><strong>{a.name}</strong><span className="muted small truncate">{model?.label ?? a.modelId} · {row?.replies ?? 0} {L('respostas', 'replies')}</span></span>
+        <span className="usage-agent__meter"><span className="usage-meter"><span className="usage-meter__fill" style={{ width: (share * 100) + '%' }} /></span><span className="muted small">{used ? percent(share) + ' ' + L('do consumo do time', 'of team usage') : L('Sem uso neste mês', 'No usage this month')}</span></span>
+        <span className="usage-agent__nums"><strong>{tokens(used)}</strong><span className="muted small">{L('tokens no mês', 'tokens this month')}</span></span><Icon name="chevron" size={14} />
+      </button>
+    })}</div>
+  </section>
 }
 
 const percent = (p: number): string => (p > 0 && p < 0.01 ? '<1%' : `${Math.round(p * 100)}%`)

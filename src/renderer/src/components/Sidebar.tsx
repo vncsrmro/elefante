@@ -209,7 +209,7 @@ export function Sidebar(): ReactNode {
           <NavItem view={{ kind: 'routines' }} icon="clock" label={L('Rotinas', 'Routines')} />
           <NavItem view={{ kind: 'skills' }} icon="layers" label="Skills" badge={proposals} />
           <NavItem view={{ kind: 'report' }} icon="report" label={L('Boletim', 'Report')} />
-          <NavItem view={{ kind: 'usage' }} icon="chart" label={L('Uso e limites', 'Usage & limits')} />
+          <NavItem view={{ kind: 'usage' }} icon="chart" label={L('Consumo', 'Usage')} />
           <NavItem view={{ kind: 'clis' }} icon="terminal" label={L('CLIs & Contas', 'CLIs & Accounts')} />
         </div>
       )}
@@ -359,7 +359,6 @@ function AgentItem({ id }: { id: string }): ReactNode {
   const agent = useStore((s) => agentById(s, id))
   const active = useStore((s) => s.view?.kind === 'agent' && s.view.id === id)
   if (!agent) return null
-  const pct = agent.limit > 0 ? agent.used / agent.limit : 1
   return (
     <button className={`nav-item ${active ? 'is-active' : ''}`} onClick={() => navigate({ kind: 'agent', id })}>
       <AgentAvatar agent={agent} size={17} />
@@ -367,7 +366,6 @@ function AgentItem({ id }: { id: string }): ReactNode {
       <span className="nav-item__meta nav-item__role" title={agent.role}>
         {agent.role}
       </span>
-      {pct >= 0.8 && <span className={`dot ${pct >= 1 ? 'dot--danger' : 'dot--warn'}`} title={L('Orçamento acima de 80%', 'Budget above 80%')} />}
     </button>
   )
 }
