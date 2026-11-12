@@ -377,7 +377,9 @@ export const ERRORS_STOP = 8 // tool calls failing in a row
 // tenth of a new one, so it counts a tenth.
 export const CACHE_READ_WEIGHT = 0.1
 export const countedTokens = (u: { inputTokens: number; cacheReadTokens: number; outputTokens: number }): number =>
-  Math.round(u.inputTokens - u.cacheReadTokens * (1 - CACHE_READ_WEIGHT) + u.outputTokens)
+  // Some CLIs report cached input separately from (or larger than) raw input.
+  // Never let that accounting mismatch turn usage into a huge negative number.
+  Math.max(0, Math.round(Math.max(0, u.inputTokens - u.cacheReadTokens) + u.cacheReadTokens * CACHE_READ_WEIGHT + u.outputTokens))
 
 // `windows`: the install command for PowerShell, where the POSIX one doesn't run.
 export const ENGINES: Record<EngineId, { label: string; cli: string; login: string; install: string; windows?: string; site: string }> = {
@@ -449,7 +451,11 @@ export const modelInfo = (id: string): Model | undefined => {
   const known = found.get(id)
   if (known) return known
   const m = /^(api|claude|codex|opencode|pi|gemini|antigravity):(.*)$/s.exec(id)
-  return m ? { id: m[2]!.trim(), engine: m[1] as EngineId, label: m[2]!.trim(), hint: L('Nome próprio', 'Custom name') } : undefined
+  if (!m) return undefined
+  const slug = m[2]!.trim()
+  const bySlug = MODELS.find((x) => x.engine === m[1] && x.id === slug)
+  if (bySlug) return bySlug
+  return { id: slug, engine: m[1] as EngineId, label: slug, hint: L('Nome próprio', 'Custom name') }
 }
 
 export interface ConnectorTool {

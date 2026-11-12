@@ -24,6 +24,7 @@ import {
   ENGINES,
   forgetMemory,
   modelById,
+  modelInfo,
   navigate,
   openDm,
   removeRoutine,
@@ -54,8 +55,13 @@ import { when } from './Routines'
 import { AgentProposal } from './Tuca'
 import { MissionHub } from './MissionHub'
 import { KanbanBoard } from './KanbanBoard'
+import { AgentQuickMenu, formatAgentModel } from './AgentQuickMenu'
 
-const ConversationContext = createContext<{ conversationId?: string; project?: string }>({})
+const ConversationContext = createContext<{
+  conversationId?: string
+  project?: string
+  onOpenAgentMenu?: (agentId: string, anchorRect?: DOMRect, clientPos?: { x: number; y: number }) => void
+}>({})
 
 export function ConversationView({ id }: { id: string }): ReactNode {
   const conv = useStore((s) => s.conversations.find((c) => c.id === id))
@@ -76,6 +82,15 @@ export function ConversationView({ id }: { id: string }): ReactNode {
   const [viewMode, setViewMode] = useState<'chat' | 'board'>('chat')
   const projectTasksCount = useStore((s) => s.tasks.filter((t) => t.conversationId === id).length)
   const [cliBadges, setCliBadges] = useState<{ cliId: string; label: string; detail: string }[]>([])
+  const [agentMenu, setAgentMenu] = useState<{
+    agentId: string
+    anchorRect?: DOMRect
+    clientPos?: { x: number; y: number }
+  } | null>(null)
+
+  const handleOpenAgentMenu = (agentId: string, anchorRect?: DOMRect, clientPos?: { x: number; y: number }): void => {
+    setAgentMenu({ agentId, anchorRect, clientPos })
+  }
 
   useEffect(() => {
     if (!conv?.project) {
@@ -100,12 +115,27 @@ export function ConversationView({ id }: { id: string }): ReactNode {
   }
 
   return (
-    <ConversationContext.Provider value={{ conversationId: id, project: conv.project }}>
+    <ConversationContext.Provider value={{ conversationId: id, project: conv.project, onOpenAgentMenu: handleOpenAgentMenu }}>
       <div className="split">
       <section className="conversation">
         <header className="topbar">
           <div className="topbar__title">
-            {dmAgent ? <AgentAvatar agent={dmAgent} size={20} /> : <Icon name={conv.project ? 'folder' : 'hash'} size={15} />}
+            {dmAgent ? (
+              <button
+                type="button"
+                className="avatar-btn avatar-btn--topbar"
+                onClick={(e) => handleOpenAgentMenu(dmAgent.id, e.currentTarget.getBoundingClientRect())}
+                onContextMenu={(e) => {
+                  e.preventDefault()
+                  handleOpenAgentMenu(dmAgent.id, undefined, { x: e.clientX, y: e.clientY })
+                }}
+                title={L(`Gerenciar @${dmAgent.handle} · Clique para trocar modelo`, `Manage @${dmAgent.handle} · Click to switch model`)}
+              >
+                <AgentAvatar agent={dmAgent} size={22} />
+              </button>
+            ) : (
+              <Icon name={conv.project ? 'folder' : 'hash'} size={15} />
+            )}
             <h1>{title}</h1>
             <div className="topbar__view-toggle">
               <button
@@ -126,7 +156,25 @@ export function ConversationView({ id }: { id: string }): ReactNode {
                 {projectTasksCount > 0 && <span className="view-toggle-count">{projectTasksCount}</span>}
               </button>
             </div>
-            {dmAgent && <span className="tag">{dmAgent.role}</span>}
+            {dmAgent && (
+              <>
+                <span className="tag">{dmAgent.role}</span>
+                <button
+                  type="button"
+                  className="topbar__model-pill"
+                  onClick={(e) => handleOpenAgentMenu(dmAgent.id, e.currentTarget.getBoundingClientRect())}
+                  onContextMenu={(e) => {
+                    e.preventDefault()
+                    handleOpenAgentMenu(dmAgent.id, undefined, { x: e.clientX, y: e.clientY })
+                  }}
+                  title={L('Modelo ativo · Clique para trocar modelo', 'Active model · Click to switch model')}
+                >
+                  <ProviderMark model={dmAgent.modelId} size={12} />
+                  <span>{formatAgentModel(dmAgent.modelId).shortLabel}</span>
+                  <Icon name="chevron" size={10} />
+                </button>
+              </>
+            )}
             {conv.project ? (
               <>
                 <div className="project-path-bar">
@@ -195,7 +243,16 @@ export function ConversationView({ id }: { id: string }): ReactNode {
             {conv.kind === 'channel' && (
               <div className="stack" title={L('Agentes no projeto', 'Agents in the project')}>
                 {members.map((a) => (
-                  <button key={a.id} className="stack__item" onClick={() => navigate({ kind: 'agent', id: a.id })} title={a.name}>
+                  <button
+                    key={a.id}
+                    className="stack__item avatar-btn"
+                    onClick={(e) => handleOpenAgentMenu(a.id, e.currentTarget.getBoundingClientRect())}
+                    onContextMenu={(e) => {
+                      e.preventDefault()
+                      handleOpenAgentMenu(a.id, undefined, { x: e.clientX, y: e.clientY })
+                    }}
+                    title={L(`@${a.handle} (${a.name}) · Clique para trocar modelo ou gerenciar`, `@${a.handle} (${a.name}) · Click to switch model or manage`)}
+                  >
                     <AgentAvatar agent={a} size={22} />
                   </button>
                 ))}
@@ -212,8 +269,16 @@ export function ConversationView({ id }: { id: string }): ReactNode {
               <Icon name="sidebarRight" size={13} /> {L('Arquivos & Editor', 'Files & Editor')}
             </button>
             {dmAgent && (
-              <button className="btn btn--ghost btn--sm" onClick={() => navigate({ kind: 'agent', id: dmAgent.id })}>
-                {L('Ver perfil', 'See profile')}
+              <button
+                className="btn btn--ghost btn--sm"
+                onClick={(e) => handleOpenAgentMenu(dmAgent.id, e.currentTarget.getBoundingClientRect())}
+                onContextMenu={(e) => {
+                  e.preventDefault()
+                  handleOpenAgentMenu(dmAgent.id, undefined, { x: e.clientX, y: e.clientY })
+                }}
+                title={L('Abrir opções e trocar modelo do agente', 'Open options and switch agent model')}
+              >
+                {L('Opções do Agente', 'Agent Options')}
               </button>
             )}
           </div>
@@ -234,6 +299,14 @@ export function ConversationView({ id }: { id: string }): ReactNode {
       </section>
       <SidePanel />
     </div>
+    {agentMenu && (
+      <AgentQuickMenu
+        agentId={agentMenu.agentId}
+        anchorRect={agentMenu.anchorRect}
+        clientPos={agentMenu.clientPos}
+        onClose={() => setAgentMenu(null)}
+      />
+    )}
     </ConversationContext.Provider>
   )
 }
@@ -317,6 +390,7 @@ export function MessageList({ messages, conversationId, empty, focus }: { messag
 }
 
 function MessageRow({ message, grouped }: { message: Message; grouped: boolean }): ReactNode {
+  const { onOpenAgentMenu } = useContext(ConversationContext)
   const me = useStore((s) => s.me)
   const agent = useStore((s) => (message.author.kind === 'agent' ? agentById(s, message.author.id) : undefined))
   const approval = useStore((s) => (message.run?.approvalId ? s.approvals.find((a) => a.id === message.run!.approvalId) : undefined))
@@ -345,15 +419,58 @@ function MessageRow({ message, grouped }: { message: Message; grouped: boolean }
   return (
     <article className={`msg ${agent ? 'msg--agent' : 'msg--me'} ${grouped ? 'msg--grouped' : ''}`}>
       <div className="msg__gutter">
-        {!grouped && (agent ? <AgentAvatar agent={agent} size={34} busy={message.run?.status === 'working'} /> : <MeAvatar initials={me.initials} size={34} />)}
+        {!grouped && (agent ? (
+          <button
+            type="button"
+            className="avatar-btn avatar-btn--msg"
+            onClick={(e) => onOpenAgentMenu?.(agent.id, e.currentTarget.getBoundingClientRect())}
+            onContextMenu={(e) => {
+              e.preventDefault()
+              onOpenAgentMenu?.(agent.id, undefined, { x: e.clientX, y: e.clientY })
+            }}
+            title={L(`Gerenciar @${agent.handle} · Clique para trocar modelo`, `Manage @${agent.handle} · Click to switch model`)}
+          >
+            <AgentAvatar agent={agent} size={34} busy={message.run?.status === 'working'} />
+          </button>
+        ) : (
+          <MeAvatar initials={me.initials} size={34} />
+        ))}
       </div>
       <div className="msg__body">
         {!grouped && (
           <div className="msg__head">
             {agent ? (
-              <button className="msg__author link" onClick={() => navigate({ kind: 'agent', id: agent.id })}>
-                {name}
-              </button>
+              <div className="msg__author-row">
+                <button
+                  type="button"
+                  className="msg__author link"
+                  onClick={(e) => onOpenAgentMenu?.(agent.id, e.currentTarget.getBoundingClientRect())}
+                  onContextMenu={(e) => {
+                    e.preventDefault()
+                    onOpenAgentMenu?.(agent.id, undefined, { x: e.clientX, y: e.clientY })
+                  }}
+                  title={L(`Gerenciar @${agent.handle} · Clique para trocar modelo`, `Manage @${agent.handle} · Click to switch model`)}
+                >
+                  {name}
+                </button>
+                <button
+                  type="button"
+                  className="msg__model-pill"
+                  onClick={(e) => {
+                    e.stopPropagation()
+                    onOpenAgentMenu?.(agent.id, e.currentTarget.getBoundingClientRect())
+                  }}
+                  onContextMenu={(e) => {
+                    e.preventDefault()
+                    e.stopPropagation()
+                    onOpenAgentMenu?.(agent.id, undefined, { x: e.clientX, y: e.clientY })
+                  }}
+                  title={L(`Modelo ativo: ${formatAgentModel(agent.modelId).label}. Clique para trocar.`, `Active model: ${formatAgentModel(agent.modelId).label}. Click to switch.`)}
+                >
+                  <ProviderMark model={agent.modelId} size={11} />
+                  <span>{formatAgentModel(agent.modelId).shortLabel}</span>
+                </button>
+              </div>
             ) : (
               <span className="msg__author">{name}</span>
             )}

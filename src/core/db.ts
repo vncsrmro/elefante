@@ -249,7 +249,9 @@ const MIGRATIONS = [
 type Row = Record<string, unknown>
 
 // countedTokens, in SQL: cache reads count CACHE_READ_WEIGHT.
-const COUNTED = `input_tokens - cache_read_tokens * ${1 - CACHE_READ_WEIGHT} + output_tokens`
+// CLIs differ in whether input_tokens includes cached input. Clamp the raw
+// portion so a cache field larger than input can never create negative usage.
+const COUNTED = `MAX(0, input_tokens - cache_read_tokens) * 1 + cache_read_tokens * ${CACHE_READ_WEIGHT} + output_tokens`
 const str = (v: unknown): string => (typeof v === 'string' ? v : '')
 
 export const monthStart = (now = new Date()): number => new Date(now.getFullYear(), now.getMonth(), 1).getTime()
@@ -295,6 +297,7 @@ export class Db {
       })
     }
     try {
+      this.db.exec("UPDATE agents SET limit_tokens = 100000000 WHERE limit_tokens > 1000000000000 OR limit_tokens < 0;")
       this.db.exec("UPDATE agents SET name = 'Fante', handle = 'fante' WHERE name LIKE '%Tuca%' OR handle LIKE '%tuca%';")
       this.db.exec("UPDATE messages SET text = REPLACE(text, 'Oi, eu sou o Tuca.', 'Oi, eu sou o Fante.') WHERE text LIKE '%Oi, eu sou o Tuca.%';")
       this.db.exec("UPDATE messages SET text = REPLACE(text, 'Hi, I''m Tuca.', 'Hi, I''m Fante.') WHERE text LIKE '%Hi, I''m Tuca.%';")
@@ -370,15 +373,26 @@ export class Db {
   }
 
   agents(): Agent[] {
-    return (this.db.prepare('SELECT * FROM agents ORDER BY created_at').all() as Row[]).map((r) => this.toAgent(r))
+    return (
+      this.db
+        .prepare(
+          'SELECT id, name, handle, role, color, instructions, model, effort, MIN(limit_tokens, 1000000000000) AS limit_tokens, grants, memory_mode, computer, computer_kind, web, browser, apps, auto_approve, folders, archived, kind, reports_to, department, responsible, responsible_role, is_chief, created_at FROM agents ORDER BY created_at'
+        )
+        .all() as Row[]
+    ).map((r) => this.toAgent(r))
   }
 
   agent(id: string): Agent | undefined {
-    const r = this.db.prepare('SELECT * FROM agents WHERE id = ?').get(id) as Row | undefined
+    const r = this.db
+      .prepare(
+        'SELECT id, name, handle, role, color, instructions, model, effort, MIN(limit_tokens, 1000000000000) AS limit_tokens, grants, memory_mode, computer, computer_kind, web, browser, apps, auto_approve, folders, archived, kind, reports_to, department, responsible, responsible_role, is_chief, created_at FROM agents WHERE id = ?'
+      )
+      .get(id) as Row | undefined
     return r && this.toAgent(r)
   }
 
   saveAgent(a: Agent): void {
+    const safeLimit = Math.min(Math.max(0, Math.round(Number(a.limit) || 0)), 1_000_000_000_000)
     this.db
       .prepare(
         `INSERT INTO agents (id, name, handle, role, color, instructions, model, effort, limit_tokens, grants, memory_mode, computer, computer_kind, web, browser, apps, auto_approve, archived, kind, reports_to, department, responsible, responsible_role, is_chief, created_at)
@@ -398,7 +412,7 @@ export class Db {
         a.instructions,
         a.modelId,
         a.effort,
-        a.limit,
+        safeLimit,
         JSON.stringify(a.grants),
         a.memory ?? 'auto',
         a.computer ? 1 : 0,

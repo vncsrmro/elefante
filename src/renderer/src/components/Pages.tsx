@@ -589,9 +589,10 @@ export function AgentPage({ id, draft: proposed, fromMessage }: { id?: string; d
                 <details className="usage-advanced"><summary>{L('Controle avançado de execução', 'Advanced execution control')}</summary><Field label={L('Teto interno mensal (milhões de tokens)', 'Internal monthly cap (millions of tokens)')} hint={L(`Conferido antes de cada turno. No limite, ${draft.name || 'o agente'} para e avisa.`, `Checked before every turn. At the limit, ${draft.name || 'the agent'} stops and tells you.`)}>
                   <NumberInput
                     min={0}
+                    max={100_000}
                     step={0.5}
                     value={draft.limit / 1_000_000}
-                    onChange={(n) => patch({ limit: Math.max(0, Math.round(n * 1_000_000)) })}
+                    onChange={(n) => patch({ limit: Math.max(0, Math.min(1_000_000_000_000, Math.round(n * 1_000_000))) })}
                     className="input--short"
                   />
                 </Field></details>
@@ -1623,9 +1624,10 @@ export function SettingsPage(): ReactNode {
               <Field label={L('Limite padrão por agente (milhões de tokens/mês)', 'Default limit per agent (millions of tokens/month)')}>
                 <NumberInput
                   min={0}
+                  max={100_000}
                   step={0.5}
                   value={settings.defaultLimit / 1_000_000}
-                  onChange={(n) => updateSettings({ defaultLimit: Math.max(0, Math.round(n * 1_000_000)) })}
+                  onChange={(n) => updateSettings({ defaultLimit: Math.max(0, Math.min(1_000_000_000_000, Math.round(n * 1_000_000))) })}
                 />
               </Field>
               <Field label={L('Teto por resposta (% do limite do mês)', 'Ceiling per reply (% of the monthly limit)')} hint={L('Chegou nele, o agente pausa e você decide se continua.', 'When it hits it, the agent pauses and you decide whether it continues.')}>

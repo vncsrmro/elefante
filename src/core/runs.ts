@@ -1182,8 +1182,8 @@ export class Runner {
           if (++refusedOver > OVER_CALLS_GRACE) halt('budget')
           return textResult(
             L(
-              `Você chegou no teto de gasto desta resposta (${tokenCount(budget)} tokens). Não chame mais ferramentas: escreva em poucas linhas o que já fez, o que descobriu e o que falta, e encerre. Se ${settings.workspaceName} mandar continuar, você segue de onde parou.`,
-              `You reached this reply's spending cap (${tokenCount(budget)} tokens). Don't call any more tools: write in a few lines what you did, what you found and what's left, and end. If ${settings.workspaceName} says to go on, you pick up where you left off.`
+              `Parei esta resposta no teto configurado de ${tokenCount(budget)} tokens (isso não é o limite da sua conta). Escreva em poucas linhas o que já fez, o que descobriu e o que falta, e encerre. Se ${settings.workspaceName} mandar continuar, você segue de onde parou.`,
+              `I paused this reply at its configured ${tokenCount(budget)}-token cap (this is not your account limit). Write a few lines about what you did, found and what's left, then end. If ${settings.workspaceName} says to go on, pick up where you left off.`
             ),
             true
           )

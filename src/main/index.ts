@@ -344,7 +344,7 @@ function createWindow(): BrowserWindow {
     titleBarStyle: process.platform === 'darwin' ? 'hiddenInset' : 'default',
     // Off a Mac the menu lives in the window: hidden until Alt, so the app looks the same.
     autoHideMenuBar: process.platform !== 'darwin',
-    ...(process.platform === 'win32' || process.platform === 'linux' ? { icon: resource('icon.png') } : {}),
+    ...(process.platform === 'win32' ? { icon: resource('icon.ico') } : process.platform === 'linux' ? { icon: resource('icon.png') } : {}),
     trafficLightPosition: { x: 16, y: 18 },
     backgroundColor: nativeTheme.shouldUseDarkColors ? '#070910' : '#eef2f9',
     webPreferences: {
@@ -360,7 +360,9 @@ function createWindow(): BrowserWindow {
   if (process.platform === 'win32') {
     try {
       const icoPath = resource('icon.ico')
-      win.setIcon(nativeImage.createFromPath(resource('icon.png')))
+      const img = nativeImage.createFromPath(icoPath)
+      if (!img.isEmpty()) win.setIcon(img)
+      else win.setIcon(nativeImage.createFromPath(resource('icon.png')))
       win.setAppDetails({
         appId: 'com.viniciusromeiro.elefante',
         appIconPath: icoPath,

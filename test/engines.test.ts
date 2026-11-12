@@ -185,10 +185,10 @@ describe('Codex exec stream', () => {
     expect(events).toEqual([{ type: 'error', message: 'usage limit reached' }])
   })
 
-  it('runs isolated from the user config, read-only, with instructions as developer_instructions', () => {
+  it('runs isolated from the user config, bypassing approvals/sandbox (Elefante owns governance), with instructions as developer_instructions', () => {
     const args = codexArgs({ model: 'gpt-5.6-luna', effort: 'low', system: 'Você é "Theo".', cwd: '/tmp/x' })
-    expect(args).toEqual(expect.arrayContaining(['exec', '--json', '--ephemeral', '--ignore-user-config', '--ignore-rules']))
-    expect(args[args.indexOf('-s') + 1]).toBe('read-only')
+    expect(args).toEqual(expect.arrayContaining(['exec', '--json', '--ephemeral', '--ignore-user-config', '--ignore-rules', '--dangerously-bypass-approvals-and-sandbox']))
+    expect(args).not.toContain('-s')
     expect(args[args.indexOf('-C') + 1]).toBe('/tmp/x')
     expect(args).toContain('developer_instructions="Você é \\"Theo\\"."')
     expect(args.at(-1)).toBe('-')

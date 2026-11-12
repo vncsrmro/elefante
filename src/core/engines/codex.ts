@@ -55,33 +55,16 @@ function toml(v: unknown): string {
   return JSON.stringify(v)
 }
 
-// Built-in capabilities agents must not have: their tools come only from the gateway.
-// Not code_mode_host: Codex routes every tool call through it, MCP ones included,
-// and without it they all fail ("code-mode host is disabled"). It gives no shell
-// or files of its own: asked to read ~/.zshrc with it, the model found no way to.
+// The gateway owns tools and the app already has a controlled shell/files
+// surface. Keeping Codex's built-ins off avoids duplicating tool schemas and
+// sending a much larger prompt on every turn.
 export const CODEX_DISABLED_FEATURES = [
-  'shell_tool',
-  'unified_exec',
-  'apps',
-  'plugins',
-  'browser_use',
-  'computer_use',
-  'in_app_browser',
-  'image_generation',
-  'multi_agent',
-  'goals',
-  'view_image',
-  'tool_suggest',
-  'skill_search',
-  'hooks',
-  'memories'
+  'shell_tool', 'unified_exec', 'apps', 'plugins', 'browser_use',
+  'computer_use', 'in_app_browser', 'image_generation', 'multi_agent',
+  'goals', 'view_image', 'tool_suggest', 'skill_search', 'hooks', 'memories'
 ]
 
-// Flags that keep the CLI isolated: ignore config and rules, no skills, web
-// search only when the agent has it, no project docs, built-in tools off, no saved session, and a
-// read-only sandbox in an empty directory as a last line of defense. The prompt comes from stdin ("-"). The app's gateway,
-// when given, is the only MCP server, with its tools approved up front: the
-// gateway decides what runs.
+// Codex uses the app gateway for tools; approvals and sandboxing are handled by Elefante.
 export function codexArgs(turn: Pick<Turn, 'model' | 'effort' | 'system' | 'cwd' | 'mcpUrl' | 'web' | 'images'>, provider: string[] = []): string[] {
   const gateway = turn.mcpUrl
     ? [
@@ -99,11 +82,11 @@ export function codexArgs(turn: Pick<Turn, 'model' | 'effort' | 'system' | 'cwd'
     '--ignore-user-config',
     '--ignore-rules',
     '--skip-git-repo-check',
-    '-s', 'read-only',
+    '--dangerously-bypass-approvals-and-sandbox',
     '-C', turn.cwd,
     '-m', turn.model,
     '-c', `model_reasoning_effort=${JSON.stringify(turn.effort)}`,
-    '-c', `developer_instructions=${JSON.stringify(turn.system)}`,
+    ...(turn.system.length <= 4000 ? ['-c', `developer_instructions=${JSON.stringify(turn.system)}`] : []),
     '-c', 'skills.include_instructions=false',
     '-c', 'skills.bundled.enabled=false',
     '-c', `web_search=${turn.web ? '"live"' : '"disabled"'}`,
@@ -113,6 +96,14 @@ export function codexArgs(turn: Pick<Turn, 'model' | 'effort' | 'system' | 'cwd'
     ...gateway,
     '-'
   ]
+}
+
+// Keep the long, per-agent instructions out of the Windows command line.
+// Passing them through `-c` makes CreateProcess fail with ENAMETOOLONG as soon
+// as the agent has a substantial prompt. The prompt is already sent on stdin,
+// so the instructions can travel there without changing the CLI contract.
+export function codexPrompt(system: string, prompt: string): string {
+  return system.length > 4000 && system.trim() ? `<elefante-instructions>\n${system}\n</elefante-instructions>\n\n${prompt}` : prompt
 }
 
 export function codexParser(): Parser {
@@ -182,7 +173,7 @@ export function codexEngine(
       const p = await provider()
       const shell = await shellEnv() // read once per launch
       const keys = Object.fromEntries(p.envNames.flatMap((n) => (shell[n] ? [[n, shell[n]]] : [])))
-      yield* runCli({ bin: path, args: codexArgs(turn, p.config), stdin: turn.prompt, cwd: turn.cwd, signal: turn.signal, parser: codexParser(), env: { ...codexEnv(home), ...keys, ...p.env } })
+      yield* runCli({ bin: path, args: codexArgs(turn, p.config), stdin: codexPrompt(turn.system, turn.prompt), cwd: turn.cwd, signal: turn.signal, parser: codexParser(), env: { ...codexEnv(home), ...keys, ...p.env } })
     }
   }
 }

@@ -163,7 +163,7 @@ describe('the budget per reply', () => {
     const r = runner(spending(120_000, 0, seen)) // the budget is 10% of 1M
     await r.send('d1', 'investiga o bug')
     await r.idle()
-    expect(seen.refused).toContain('Você chegou no teto de gasto desta resposta (100 mil tokens)')
+    expect(seen.refused).toContain('teto configurado de 100 mil tokens (isso não é o limite da sua conta)')
     const paused = reply()
     expect(paused).toMatchObject({ text: 'Instalei o Swift; falta rodar os testes.', run: { status: 'paused', budget: 100_000 } })
     expect(labels()).toContain('Chegou no teto da resposta')

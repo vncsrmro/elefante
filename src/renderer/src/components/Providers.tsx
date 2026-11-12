@@ -456,7 +456,7 @@ function ProviderInspector({ preset, config }: { preset: ProviderPreset; config?
           text: r.error || L('Nenhum modelo retornado pelo endpoint. Verifique se o servidor/chave está ativo.', 'No models returned by endpoint. Check if the server/key is active.')
         })
       } else {
-        const merged = [...new Set([...models, ...r.models.slice(0, 30)])]
+        const merged = [...new Set([...models, ...r.models])]
         setModels(merged)
         await persist(true, merged)
         setBanner({
