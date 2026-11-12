@@ -29,7 +29,7 @@ const MAX_DEPTH = 3 // agent replies chained from one human message without tool
 const MAX_WORK_DEPTH = 50 // agent replies chained when doing active tool work
 const DELTA_FLUSH_MS = 40
 const RETRYABLE: RunStatus[] = ['failed', 'stopped', 'interrupted', 'limit_reached']
-const MAX_RESULT_CHARS = 60_000 // per tool result handed back to the model
+const MAX_RESULT_CHARS = 300_000 // per tool result handed back to the model (allows complete outputs without truncating code/logs)
 const REASON_PARAM = '_motivo'
 const OVER_CALLS_GRACE = 3 // calls refused past the budget before the turn is cut
 const BUDGET_OVERRUN = 1.3 // past the budget by this much without wrapping up, the turn is cut
@@ -561,7 +561,9 @@ export class Runner {
 
     // Guards (spec §3). Long work that keeps going somewhere is never cut: a loop
     // repeats itself, a stuck turn goes quiet, and a costly one pauses to ask.
-    const budget = Math.round((agent.limit * (settings.runBudgetPct ?? RUN_BUDGET_PCT)) / 100)
+    // If runBudgetPct <= 0, per-reply budget pause is disabled (runs continuously until the agent's monthly limit).
+    const budgetPct = settings.runBudgetPct ?? RUN_BUDGET_PCT
+    const budget = budgetPct > 0 ? Math.round((agent.limit * budgetPct) / 100) : 0
     const stallMs = (settings.runStallMinutes ?? RUN_STALL_MINUTES) * 60_000
     const seen = new Map<string, { result: string; n: number }>()
     let failing = 0 // tool calls failing in a row
@@ -1178,7 +1180,7 @@ export class Runner {
     const session = this.deps.gateway?.open({
       tools: toolDefs,
       call: async (name, args) => {
-        if (overBudget) {
+        if (budget > 0 && overBudget) {
           if (++refusedOver > OVER_CALLS_GRACE) halt('budget')
           return textResult(
             L(
@@ -1272,7 +1274,7 @@ export class Runner {
           progress = { tokens: ev.tokens, cacheRead: ev.cacheRead ?? 0 }
           const counted = Math.round(ev.tokens - progress.cacheRead * (1 - CACHE_READ_WEIGHT))
           if (used + counted > agent.limit) halt('limit')
-          else if (counted > budget) {
+          else if (budget > 0 && counted > budget) {
             if (!overBudget) addSteps({ id: randomUUID(), label: L('Chegou no teto da resposta', 'Reached the reply cap'), detail: `${tokenCount(budget)} tokens`, status: 'error' })
             overBudget = true
             if (counted > budget * BUDGET_OVERRUN) halt('budget')

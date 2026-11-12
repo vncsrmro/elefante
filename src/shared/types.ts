@@ -367,7 +367,8 @@ export interface TelegramInfo {
 
 // Guards per reply (spec §3), so nothing runs away unattended (a routine at 3 a.m.)
 // without cutting long work that is going somewhere.
-export const RUN_BUDGET_PCT = 10 // past this share of the month, the reply pauses and asks to continue
+// 0: sem pausa por teto de resposta (continua trabalhando até o limite mensal do agente)
+export const RUN_BUDGET_PCT = 0 // default 0: execução contínua sem pausas intermediárias por teto de turno
 export const RUN_STALL_MINUTES = 20 // no text, no tokens, no tool finishing: stuck
 export const REPEAT_WARN = 3 // the same call with the same result: the agent is told to change course
 export const REPEAT_STOP = 5 // ...and then the reply stops

@@ -159,6 +159,7 @@ describe('the budget per reply', () => {
   })
 
   it('pauses the reply at its share of the month, and Continuar picks up from what it did', async () => {
+    settings.runBudgetPct = 10
     const seen: { refused?: string; turns: Turn[] } = { turns: [] }
     const r = runner(spending(120_000, 0, seen)) // the budget is 10% of 1M
     await r.send('d1', 'investiga o bug')
@@ -176,6 +177,7 @@ describe('the budget per reply', () => {
   })
 
   it('counts a token read from the cache as a tenth', async () => {
+    settings.runBudgetPct = 10
     const seen: { refused?: string; turns: Turn[] } = { turns: [] }
     const r = runner(spending(500_000, 480_000, seen)) // 20k new + 480k cached: counts 68k
     await r.send('d1', 'investiga o bug')
@@ -186,6 +188,7 @@ describe('the budget per reply', () => {
   })
 
   it('cuts a reply that keeps spending far past it', async () => {
+    settings.runBudgetPct = 10
     const r = runner({
       id: 'claude',
       async *run(turn) {
@@ -197,6 +200,16 @@ describe('the budget per reply', () => {
     await r.idle()
     expect(reply().run).toMatchObject({ status: 'paused' })
     expect(reply().run!.receipt!.inputTokens).toBeLessThanOrEqual(150_000)
+  })
+
+  it('runs continuously without pausing when runBudgetPct is 0 (default)', async () => {
+    delete settings.runBudgetPct
+    const seen: { refused?: string; turns: Turn[] } = { turns: [] }
+    const r = runner(spending(250_000, 0, seen))
+    await r.send('d1', 'tarefa longa sem interrupção')
+    await r.idle()
+    expect(seen.refused).toBeUndefined()
+    expect(reply().run?.status).toBe('done')
   })
 })
 

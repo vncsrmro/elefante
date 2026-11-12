@@ -1630,12 +1630,12 @@ export function SettingsPage(): ReactNode {
                   onChange={(n) => updateSettings({ defaultLimit: Math.max(0, Math.min(1_000_000_000_000, Math.round(n * 1_000_000))) })}
                 />
               </Field>
-              <Field label={L('Teto por resposta (% do limite do mês)', 'Ceiling per reply (% of the monthly limit)')} hint={L('Chegou nele, o agente pausa e você decide se continua.', 'When it hits it, the agent pauses and you decide whether it continues.')}>
+              <Field label={L('Teto por resposta (% do limite do mês, 0 = contínuo)', 'Ceiling per reply (% of monthly limit, 0 = continuous)')} hint={L('0 desativa pausas no meio de tarefas longas. Acima de 0, pausa ao atingir a porcentagem.', '0 disables mid-task pauses. Above 0, pauses when reaching the percentage.')}>
                 <NumberInput
-                  min={1}
+                  min={0}
                   max={100}
                   value={settings.runBudgetPct ?? RUN_BUDGET_PCT}
-                  onChange={(n) => updateSettings({ runBudgetPct: Math.min(100, Math.max(1, Math.round(n))) })}
+                  onChange={(n) => updateSettings({ runBudgetPct: Math.min(100, Math.max(0, Math.round(n))) })}
                 />
               </Field>
               <Field label={L('Travado depois de (minutos sem sinal)', 'Stalled after (minutes without a sign)')} hint={L('Sem texto nem ferramenta terminando. Trabalho longo que anda não é cortado.', 'No text and no tool finishing. Long work that’s moving isn’t cut off.')}>
