@@ -17,7 +17,9 @@
     "dist": "sh scripts/dist.sh",
     "dist:win": "npm run build && electron-builder --win nsis --x64 --publish never",
     "install-app": "npm run dist && sh scripts/install-app.sh",
-    "release": "sh scripts/release.sh"
+    "release": "sh scripts/release.sh",
+    "brand:icons": "electron scripts/generate-elephant-icons.mjs",
+    "brand:check": "node scripts/verify-brand.mjs"
   },
   "devDependencies": {
     "@types/node": "^26.6.5",
@@ -85,7 +87,8 @@
       "perMachine": false,
       "shortcutName": "Elefante",
       "installerIcon": "build/icon.ico",
-      "uninstallerIcon": "build/icon.ico"
+      "uninstallerIcon": "build/icon.ico",
+      "include": "build/installer.nsh"
     },
     "linux": {
       "target": [

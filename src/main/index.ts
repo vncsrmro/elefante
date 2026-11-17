@@ -12,6 +12,7 @@ import { autostartEntry, autostartFile, onPath } from '../core/platform'
 
 const NAME = 'Elefante'
 app.setName(NAME)
+app.setName(NAME)
 // Windows shows notifications only for an app with an id, the same as the installer's.
 if (process.platform === 'win32') app.setAppUserModelId('com.viniciusromeiro.elefante')
 

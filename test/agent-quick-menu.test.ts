@@ -65,7 +65,7 @@ describe('Agent Quick Menu & Model Switching', () => {
   it.skipIf(!hasChrome())(
     'never overflows horizontally even with long model names and expanded picker',
     async () => {
-      const browser = await chromium.launch({ channel: 'chrome', headless: true })
+      const browser = await chromium.launch({ channel: 'chrome', headless: true, timeout: 15_000 })
       try {
         const page = await browser.newPage({ viewport: { width: 900, height: 800 } })
         const css = readFileSync(join(root, 'src/renderer/src/styles.css'), 'utf8')
@@ -204,6 +204,8 @@ describe('Agent Quick Menu & Model Switching', () => {
       } finally {
         await browser.close()
       }
-    }
+    },
+    // Cold browser startup on macOS/Linux runners can exceed the unit-test budget.
+    30_000
   )
 })
