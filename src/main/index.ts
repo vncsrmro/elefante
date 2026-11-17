@@ -12,9 +12,11 @@ import { autostartEntry, autostartFile, onPath } from '../core/platform'
 
 const NAME = 'Elefante'
 app.setName(NAME)
+// Development must not register an Electron shortcut under the installed app identity.
+const APP_ID = app.isPackaged ? 'com.viniciusromeiro.elefante' : 'com.viniciusromeiro.elefante.dev'
 app.setName(NAME)
 // Windows shows notifications only for an app with an id, the same as the installer's.
-if (process.platform === 'win32') app.setAppUserModelId('com.viniciusromeiro.elefante')
+if (process.platform === 'win32') app.setAppUserModelId(APP_ID)
 
 // Until the core says which language the person picked, the Mac's.
 const systemLocale = ((): string | undefined => {
@@ -365,7 +367,7 @@ function createWindow(): BrowserWindow {
       if (!img.isEmpty()) win.setIcon(img)
       else win.setIcon(nativeImage.createFromPath(resource('icon.png')))
       win.setAppDetails({
-        appId: 'com.viniciusromeiro.elefante',
+        appId: APP_ID,
         appIconPath: icoPath,
         relaunchCommand: `"${process.execPath}"`,
         relaunchDisplayName: NAME
