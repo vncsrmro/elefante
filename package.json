@@ -83,7 +83,9 @@
     "nsis": {
       "oneClick": true,
       "perMachine": false,
-      "shortcutName": "Elefante"
+      "shortcutName": "Elefante",
+      "installerIcon": "build/icon.ico",
+      "uninstallerIcon": "build/icon.ico"
     },
     "linux": {
       "target": [

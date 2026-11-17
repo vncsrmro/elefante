@@ -176,3 +176,9 @@ Created by **Vinicius Romeiro** ([@vncsrmro](https://github.com/vncsrmro)) · `v
 </p>
 
 </div>
+
+## Identidade oficial
+
+[Manual de marca](docs/brand/MANUAL.md) ? [Manual visual](docs/brand/manual.html)
+
+O s?mbolo oficial ? o elefante verde lima de `build/official-icon.png`.
