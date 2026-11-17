@@ -203,7 +203,7 @@ export function CloudClisPage(): ReactNode {
         </div>
 
         <div className="pv-metric">
-          <span className="pv-metric__icon" style={{ background: 'rgba(168, 85, 247, 0.12)', color: 'var(--c-violet)' }}>
+          <span className="pv-metric__icon" style={{ background: 'rgba(208, 255, 34, 0.12)', color: 'var(--c-violet)' }}>
             <Icon name="cpu" size={16} />
           </span>
           <div className="pv-metric__body">

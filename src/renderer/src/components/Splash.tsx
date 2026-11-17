@@ -297,7 +297,7 @@ export function Splash({ onDone }: { onDone: () => void }): ReactNode {
             top: '52%',
             transform: 'translate(-50%, -50%)',
             borderRadius: '50%',
-            background: 'radial-gradient(circle, rgba(139, 92, 246, 0.26) 0%, transparent 70%)',
+            background: 'radial-gradient(circle, rgba(208, 255, 34, 0.26) 0%, transparent 70%)',
             filter: 'blur(55px)'
           }}
         />

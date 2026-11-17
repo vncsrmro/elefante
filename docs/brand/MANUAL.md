@@ -1,25 +1,31 @@
-# Elefante ? identidade oficial
+# Elefante — grafite e lima
 
-Edi??o novembro de 2026. O elefante tridimensional verde lima ? o s?mbolo oficial. Matriz: build/official-icon.png, preservada sem redesenho.
+Identidade oficial · Novembro de 2026
 
-## Paleta
-- Lima #D0FF22: a??es e destaques no escuro. Texto #10140C sobre lima.
-- Floresta #10140C: fundo escuro. Superf?cies #191F13, bordas #303B24.
-- Marfim #F7F9F2: fundo claro. Superf?cies brancas e navega??o #EEF2E5.
-- Verde #416015: a??es e links no claro, com texto branco nos bot?es.
-- Texto escuro #202817; texto claro #EDF3E3.
+## 01 / Símbolo
 
-## S?mbolo
-Preserve volume, brilho, propor??o e cores. N?o distor?a, recorte, rotacione, adicione contorno ou substitua por emoji. ?rea livre m?nima: 20% da largura. Tamanho recomendado: 32 px; 16 px reservado ? bandeja e favicon. N?o use lima para texto sobre fundo branco.
+O elefante tridimensional verde lima é o símbolo oficial. Preserve a proporção, o volume e os brilhos do arquivo original. Não redesenhe, recorte, rotacione ou aplique filtros. Área livre mínima: 20% da largura. Use a partir de 32 px; 16 px apenas em bandeja e favicon.
 
-## Tipografia
-Inter Variable, fallback Segoe UI e system-ui. T?tulos 600, corpo 400, a??es 500. Corpo a partir de 14 px; legendas a partir de 12 px.
+## 02 / Paleta
 
-## Interface
-Modo claro: marfim, branco e verde profundo. Modo escuro: floresta e lima. Priorize uma a??o principal por regi?o; preserve cores sem?nticas de erro, alerta e sucesso. Foco de teclado vis?vel; estados n?o dependem s? de cor.
+Grafite #18191B é o fundo principal. #202124 define superfícies; #34363B, bordas. Lima #D0FF22 destaca ações e navegação. Textos: #F3F4F5 e #B3B7BF. Não usar fundos oliva nem acentos roxos.
 
-## Distribui??o
-ICO multirresolu??o para Windows, ICNS para macOS, PNG para Linux, bandeja e interface. Gere com scripts/brand-icons.ps1 e scripts/brand-icons.mjs. O arquivo fonte ? a refer?ncia can?nica.
+## 03 / Modo claro
 
-## Voz
-Direta, pr?xima e precisa. Explique a??es e resultados sem inventar capacidades. Nome: Elefante.
+Fundo #F6F7F8, superfícies brancas, texto #202226. Use #496600 em links e botões com texto branco. O símbolo mantém o verde original. Lima não deve ser usado como texto sobre branco.
+
+## 04 / Tipografia
+
+Inter Variable, com Segoe UI e system-ui como alternativas. Títulos em peso 600; corpo 400; ações 500. Corpo mínimo de 14 px e legendas de 12 px.
+
+## 05 / Interface
+
+Uma ação principal por região. Navegação ativa e foco usam a cor de destaque. Erros, alertas e sucesso mantêm cores semânticas e rótulos. Fundos neutros dão espaço ao conteúdo.
+
+## 06 / Aplicações
+
+Use PNG na interface e na bandeja, ICO multirresolução no Windows e ICNS no macOS. A matriz oficial é build/official-icon.png. Não substitua o símbolo por emoji.
+
+## 07 / Voz e comunidade
+
+Direta, próxima e precisa. Explique o que o produto faz sem prometer resultados automáticos. Nome: Elefante. Repositório: github.com/vncsrmro/elefante.

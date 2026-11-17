@@ -7,3 +7,4 @@ sizes.forEach((s,i)=>{const p=6+i*16;header[p]=s===256?0:s;header[p+1]=header[p]
 writeFileSync(new URL('../build/icon.ico',import.meta.url),Buffer.concat([header,...buffers]))
 const png=readFileSync(new URL('../build/brand-512.png',import.meta.url));const h=Buffer.alloc(16);h.write('icns');h.writeUInt32BE(png.length+16,4);h.write('ic09',8);h.writeUInt32BE(png.length+8,12)
 writeFileSync(new URL('../build/icon.icns',import.meta.url),Buffer.concat([h,png]))
+writeFileSync(new URL('../build/elefante-lime.ico',import.meta.url),readFileSync(new URL('../build/icon.ico',import.meta.url)))

@@ -311,7 +311,7 @@ export function ProvidersPage(): ReactNode {
           </div>
 
           <div className="pv-metric">
-            <span className="pv-metric__icon" style={{ background: 'rgba(139, 92, 246, 0.14)', color: '#a78bfa' }}>
+            <span className="pv-metric__icon" style={{ background: 'rgba(208, 255, 34, 0.14)', color: 'var(--accent)' }}>
               <Icon name="lock" size={16} />
             </span>
             <div className="pv-metric__body">

@@ -133,6 +133,10 @@
       {
         "from": "build/icon.ico",
         "to": "icon.ico"
+      },
+      {
+        "from": "build/elefante-lime.ico",
+        "to": "elefante-lime.ico"
       }
     ]
   }
