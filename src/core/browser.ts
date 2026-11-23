@@ -361,7 +361,11 @@ export class Browser {
       this.deps.emit({ type: 'browser', view: { agentId: agent.id, url: '', title: '', shown: false, log: [], at: Date.now() } })
       return
     }
+    const wasShown = this.views.get(agent.id)?.shown === true
     const r = await this.deps.host(agent.id, action, { title: L(`Navegador de ${agent.name} · feche a janela pra devolver`, `${agent.name}'s browser · close the window to hand it back`) })
+    if (action === 'hide' && wasShown && this.views.get(agent.id)?.shown === true) {
+      this.setShown(agent.id, false)
+    }
     this.seen(agent.id, r)
   }
 

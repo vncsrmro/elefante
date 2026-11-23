@@ -38,8 +38,8 @@ export class Browsers {
     this.wins.clear()
   }
 
-  private partition(agentId: string): string {
-    return `persist:navegador-${agentId}`
+  private partition(_agentId: string): string {
+    return 'persist:navegador-shared'
   }
 
   private win(agentId: string): BrowserWindow {

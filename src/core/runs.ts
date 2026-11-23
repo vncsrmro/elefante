@@ -1633,13 +1633,18 @@ export class Runner {
         .find((m) => m.author.kind === 'agent' && m.author.id === agentId && m.run?.status === 'waiting_input')
       if (asked && (!hit || asked.at > (hit.asked?.at ?? 0))) hit = { conv, asked }
     }
-    // If no waiting_input question, check recent messages where this agent used the browser or requested takeover
+    // If no waiting_input question, check recent messages where this agent used the browser or is currently working
     if (!hit) {
       for (const conv of this.deps.db.conversations()) {
         const browserMsg = this.deps.db
           .recentMessages(conv.id, 30)
           .reverse()
-          .find((m) => m.author.kind === 'agent' && m.author.id === agentId && (m.run?.browser || /navegador|instagram|flow|login|assumir/i.test(m.text)))
+          .find(
+            (m) =>
+              m.author.kind === 'agent' &&
+              m.author.id === agentId &&
+              (m.run?.browser || m.run?.status === 'working' || /navegador|instagram|flow|login|assumir|verificação|devolver/i.test(m.text))
+          )
         if (browserMsg && (!hit || browserMsg.at > (hit.asked?.at ?? 0))) hit = { conv, asked: browserMsg }
       }
     }

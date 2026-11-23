@@ -6,7 +6,7 @@
 // protocol; the page scripts are the same as in the Electron fallback. The
 // screen streams to the app while it changes, so the panel is a live view.
 import { execFileSync, spawn, type ChildProcess } from 'node:child_process'
-import { existsSync, mkdirSync, readFileSync, readlinkSync, rmSync } from 'node:fs'
+import { existsSync, mkdirSync, readFileSync, readlinkSync, rmSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { L } from '../shared/lang'
 import { browserBrand, findBrowser, findChrome, userAgentPlatform } from './platform'
@@ -84,12 +84,60 @@ class Tab {
   private world: number | undefined // our isolated world in the tab's main frame
   closedAll?: () => void // every tab is gone (I closed the window)
   remote = false // I'm driving it from the panel (no window: Elefante as a server)
+  private cookieTimer?: ReturnType<typeof setInterval>
 
   constructor(
     readonly proc: ChildProcess,
     readonly headed: boolean,
-    private onFrame?: (jpeg: string) => boolean
+    private onFrame?: (jpeg: string) => boolean,
+    private cookieFiles: string[] = []
   ) {}
+
+  async snapshotCookies(): Promise<void> {
+    if (this.cookieFiles.length === 0) return
+    try {
+      const { cookies } = (await this.send('Storage.getCookies')) as { cookies?: unknown[] }
+      if (Array.isArray(cookies) && cookies.length > 0) {
+        const data = JSON.stringify(cookies)
+        for (const f of this.cookieFiles) {
+          try {
+            writeFileSync(f, data, 'utf8')
+          } catch {}
+        }
+      }
+    } catch {}
+  }
+
+  async restoreCookies(): Promise<void> {
+    for (const f of this.cookieFiles) {
+      if (!existsSync(f)) continue
+      try {
+        const cookies = JSON.parse(readFileSync(f, 'utf8')) as unknown[]
+        if (Array.isArray(cookies) && cookies.length > 0) {
+          await this.send('Storage.setCookies', { cookies })
+          break
+        }
+      } catch {}
+    }
+  }
+
+  async gracefulClose(): Promise<void> {
+    if (this.cookieTimer) {
+      clearInterval(this.cookieTimer)
+      this.cookieTimer = undefined
+    }
+    await this.snapshotCookies()
+    try {
+      const { targetInfos } = (await this.send('Target.getTargets')) as { targetInfos?: { type: string; url: string }[] }
+      const page = targetInfos?.find((t) => t.type === 'page' && /^https?:/.test(t.url))
+      if (page?.url) this.url = page.url
+    } catch {}
+    const exited = new Promise<void>((r) => this.proc.once('exit', () => r()))
+    void this.send('Browser.close').catch(() => {})
+    await Promise.race([exited, wait(2500)])
+    this.close()
+    await gone(this.proc)
+  }
 
   async connect(port: string): Promise<void> {
     const { webSocketDebuggerUrl } = (await (await fetch(`http://127.0.0.1:${port}/json/version`)).json()) as { webSocketDebuggerUrl: string }
@@ -104,9 +152,14 @@ class Tab {
       this.pending.clear()
     })
     await this.send('Target.setDiscoverTargets', { discover: true })
+    await this.restoreCookies()
     const { targetInfos } = (await this.send('Target.getTargets')) as { targetInfos: { targetId: string; type: string; url: string }[] }
     const page = targetInfos.find((t) => t.type === 'page')
     await this.follow(page ? page.targetId : ((await this.send('Target.createTarget', { url: 'about:blank' })) as { targetId: string }).targetId)
+    if (this.headed && this.cookieFiles.length > 0) {
+      this.cookieTimer = setInterval(() => void this.snapshotCookies(), 2000)
+      this.cookieTimer.unref?.()
+    }
   }
 
   send(method: string, params: Record<string, unknown> = {}, session = ''): Promise<Record<string, unknown>> {
@@ -203,6 +256,10 @@ class Tab {
   }
 
   close(): void {
+    if (this.cookieTimer) {
+      clearInterval(this.cookieTimer)
+      this.cookieTimer = undefined
+    }
     try {
       this.ws.close()
     } catch {}
@@ -352,15 +409,17 @@ export class ChromeBrowsers {
       throw new Error(L('o navegador não abriu a tempo', "browser didn't open in time"))
     }
     const onFrame = this.onFrame
-    const tab = new Tab(proc, headed, onFrame && ((jpeg) => onFrame(agentId, jpeg)))
+    const brandKey = browserBrand(bin).toLowerCase().replace(/[^a-z0-9]/g, '') || 'chrome'
+    const cookieFiles = [join(profile, 'elefante-cookies.json'), join(this.dir, `shared-cookies-${brandKey}.json`)]
+    const tab = new Tab(proc, headed, onFrame && ((jpeg) => onFrame(agentId, jpeg)), cookieFiles)
     await tab.connect(port)
     proc.once('exit', () => {
       if (this.tabs.get(agentId) !== tab) return
       this.tabs.delete(agentId)
       tab.close()
-      if (headed) this.handBack(agentId, tab.url)
+      if (headed) void this.handBack(agentId, tab.url)
     })
-    if (headed) tab.closedAll = () => this.handBack(agentId, tab.url)
+    if (headed) tab.closedAll = () => void this.handBack(agentId, tab.url)
     this.tabs.set(agentId, tab)
     return tab
   }
@@ -373,8 +432,7 @@ export class ChromeBrowsers {
 
     if (currentTab && requestedBin && wanted !== currentBin) {
       this.tabs.delete(agentId)
-      currentTab.close()
-      await gone(currentTab.proc)
+      await currentTab.gracefulClose()
     } else if (currentTab) {
       return currentTab
     }
@@ -388,18 +446,17 @@ export class ChromeBrowsers {
   }
 
   // I'm done with the window: back to headless, on the page I left.
-  private handBack(agentId: string, url: string): void {
-    if (this.handingBack.has(agentId)) return
+  private handBack(agentId: string, url: string): Promise<Tab | undefined> {
+    if (this.handingBack.has(agentId)) return this.starting.get(agentId) ?? Promise.resolve(undefined)
     this.handingBack.add(agentId)
     const t = this.tabs.get(agentId)
     if (t?.headed) {
       this.tabs.delete(agentId)
-      t.close()
     }
     const currentBin = this.agentBins.get(agentId) ?? this.bin
-    const p = (t?.headed ? gone(t.proc) : Promise.resolve())
+    const p = (t?.headed ? t.gracefulClose() : Promise.resolve())
       .then(() => (process.platform === 'win32' ? wait(400) : Promise.resolve()))
-      .then(() => this.launch(agentId, false, url, currentBin))
+      .then(() => this.launch(agentId, false, t?.url || url, currentBin))
       .then(async (tab) => {
         await this.settle(tab)
         // Only now: hearing it's back, the app asks for a frame and wakes up runner, which waits for this Chrome.
@@ -415,6 +472,7 @@ export class ChromeBrowsers {
         this.handingBack.delete(agentId)
       })
     this.starting.set(agentId, p)
+    return p
   }
 
   async run(agentId: string, op: BrowserOp, args: Record<string, unknown> = {}): Promise<BrowserReply> {
@@ -466,11 +524,11 @@ export class ChromeBrowsers {
         const brand = browserBrand(currentBin)
         return { url: current.url, title: '', browserName: brand, shown: true }
       }
-      const url = current?.url
+      let url = current?.url
       if (current) {
         this.tabs.delete(agentId)
-        current.close()
-        await gone(current.proc)
+        await current.gracefulClose()
+        url = current.url || url
       }
       const tab = await this.launch(agentId, true, url, currentBin)
       this.onShown(agentId, true)
@@ -479,9 +537,9 @@ export class ChromeBrowsers {
     }
     if (op === 'hide') {
       const t = this.tabs.get(agentId)
-      if (t?.headed) this.handBack(agentId, t.url)
+      const nextTab = t?.headed ? await this.handBack(agentId, t.url).catch(() => undefined) : t
       const brand = browserBrand(this.agentBins.get(agentId) || this.bin)
-      return { url: t?.url ?? '', title: '', browserName: brand, shown: false }
+      return { url: nextTab?.url ?? t?.url ?? '', title: '', browserName: brand, shown: false }
     }
 
     const tab = await this.tab(agentId, wantedBin)
