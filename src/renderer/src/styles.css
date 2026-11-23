@@ -13592,3 +13592,28 @@ button:focus-visible, a:focus-visible { outline: 2px solid var(--accent); outlin
 .project-chat-menu__item:hover {
   background: rgba(255, 255, 255, 0.06);
 }
+
+/* Fix native Windows <select> dropdown white-on-white options in dark theme */
+select,
+.gov-input,
+.input {
+  color-scheme: dark;
+}
+
+select option,
+.gov-input option,
+.input option {
+  background-color: #181a1f;
+  color: #f3f4f6;
+}
+:root[data-theme="light"] select,
+:root[data-theme="light"] .gov-input,
+:root[data-theme="light"] .input {
+  color-scheme: light;
+}
+:root[data-theme="light"] select option,
+:root[data-theme="light"] .gov-input option,
+:root[data-theme="light"] .input option {
+  background-color: #ffffff;
+  color: #111827;
+}
