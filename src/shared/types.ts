@@ -393,7 +393,7 @@ export const ENGINES: Record<EngineId, { label: string; cli: string; login: stri
   opencode: { label: 'OpenCode', cli: 'opencode', login: 'opencode auth login', install: 'curl -fsSL https://opencode.ai/install | bash', windows: 'npm install -g opencode-ai', site: 'https://opencode.ai' },
   pi: { label: 'Pi', cli: 'pi', login: 'pi', install: 'npm install -g @earendil-works/pi-coding-agent', site: 'https://pi.dev' },
   gemini: { label: 'Gemini CLI', cli: 'gemini', login: 'gemini', install: 'npm install -g @google/gemini-cli', site: 'https://github.com/google-gemini/gemini-cli' },
-  antigravity: { label: 'Antigravity', cli: 'agy', login: 'agy', install: 'winget install Google.Antigravity', site: 'https://antigravity.google' }
+  antigravity: { label: 'Antigravity', cli: 'agy', login: 'agy', install: 'curl -fsSL https://antigravity.google/cli/install.sh | bash', windows: 'irm https://antigravity.google/cli/install.ps1 | iex', site: 'https://antigravity.google' }
 }
 export const ENGINE_IDS = Object.keys(ENGINES) as EngineId[]
 
@@ -418,12 +418,32 @@ export const MODELS: Model[] = [
   model('gpt-5.6-luna', 'codex', 'GPT-5.6 Luna', 'Bom pra maioria', 'Good for most things'),
   model('gpt-5.6-terra', 'codex', 'GPT-5.6 Terra', 'Problemas difíceis', 'Hard problems'),
   model('gpt-5.6-sol', 'codex', 'GPT-5.6 Sol', 'O mais capaz, mais lento', 'The most capable, slower'),
+  model('gemini-4-neon-xhigh', 'antigravity', 'Gemini 4 Neon (Extra)', 'Raciocínio máximo (Extra High)', 'Maximum reasoning (Extra High)'),
+  model('gemini-4-neon-high', 'antigravity', 'Gemini 4 Neon (High)', 'Padrão de ponta para arquitetura e código', 'Top-tier default for architecture and code'),
+  model('gemini-4-neon-medium', 'antigravity', 'Gemini 4 Neon (Medium)', 'Equilibrado e rápido', 'Balanced and fast'),
+  model('gemini-4-neon-low', 'antigravity', 'Gemini 4 Neon (Low)', 'Respostas rápidas com alta inteligência', 'Fast replies with high intelligence'),
+  model('gemini-4-carbon-high', 'antigravity', 'Gemini 4 Carbon (High)', 'Planejamento profundo e problemas complexos', 'Deep planning and complex problems'),
+  model('gemini-4-carbon-medium', 'antigravity', 'Gemini 4 Carbon (Medium)', 'Equilíbrio entre profundidade e velocidade', 'Balance between depth and speed'),
+  model('gemini-4-carbon-low', 'antigravity', 'Gemini 4 Carbon (Low)', 'Carbon ágil para execução', 'Agile Carbon for execution'),
   model('gemini-4-argon-high', 'antigravity', 'Gemini 4 Argon (High)', 'O mais novo e capaz', 'Newest and most capable'),
   model('gemini-4-argon-medium', 'antigravity', 'Gemini 4 Argon (Medium)', 'Equilibrado e rápido', 'Balanced and fast'),
+  model('gemini-4-argon-low', 'antigravity', 'Gemini 4 Argon (Low)', 'Argon rápido', 'Fast Argon'),
+  model('gemini-4-hydrogen-xhigh', 'antigravity', 'Gemini 4 Hydrogen (Extra)', 'Hydrogen com esforço máximo', 'Hydrogen with maximum effort'),
+  model('gemini-4-hydrogen-high', 'antigravity', 'Gemini 4 Hydrogen (High)', 'Executor rápido de alta precisão', 'High-precision fast executor'),
+  model('gemini-4-hydrogen-medium', 'antigravity', 'Gemini 4 Hydrogen (Medium)', 'Leve e veloz para tarefas diretas', 'Light and fast for direct tasks'),
+  model('gemini-4-hydrogen-low', 'antigravity', 'Gemini 4 Hydrogen (Low)', 'Ultra rápido para edições curtas', 'Ultra fast for short edits'),
   model('gemini-3.8-flash-low', 'antigravity', 'Gemini 3.8 Flash (Low)', 'Instantâneo (2s), ideal pro Fante', 'Instant (2s), ideal for Fante'),
   model('gemini-3.8-flash-medium', 'antigravity', 'Gemini 3.8 Flash (Medium)', 'Equilibrado e ágil', 'Balanced and agile'),
   model('gemini-3.8-flash-high', 'antigravity', 'Gemini 3.8 Flash (High)', 'Raciocínio profundo (lento)', 'Deep reasoning (slower)'),
-  model('claude-opus-5-5-high', 'antigravity', 'Claude Opus 5.5 (High)', 'Raciocínio complexo', 'Complex reasoning')
+  model('claude-opus-5-5-high', 'antigravity', 'Claude Opus 5.5 (High)', 'Raciocínio complexo (Thinking)', 'Complex reasoning (Thinking)'),
+  model('claude-opus-5-5-medium', 'antigravity', 'Claude Opus 5.5 (Medium)', 'Opus 5.5 equilibrado', 'Balanced Opus 5.5'),
+  model('claude-opus-5-5-low', 'antigravity', 'Claude Opus 5.5 (Low)', 'Opus 5.5 rápido', 'Fast Opus 5.5'),
+  model('claude-sonnet-5-5-high', 'antigravity', 'Claude Sonnet 5.5 (High)', 'Sonnet 5.5 com raciocínio profundo', 'Sonnet 5.5 with deep reasoning'),
+  model('claude-sonnet-5-5-medium', 'antigravity', 'Claude Sonnet 5.5 (Medium)', 'Sonnet 5.5 equilibrado', 'Balanced Sonnet 5.5'),
+  model('claude-sonnet-5-5-low', 'antigravity', 'Claude Sonnet 5.5 (Low)', 'Sonnet 5.5 ágil', 'Agile Sonnet 5.5'),
+  model('claude-opus-4-6-high', 'antigravity', 'Claude Opus 4.6 (High)', 'Claude Opus 4.6 (Thinking)', 'Claude Opus 4.6 (Thinking)'),
+  model('claude-sonnet-4-6-high', 'antigravity', 'Claude Sonnet 4.6 (High)', 'Claude Sonnet 4.6 (Thinking)', 'Claude Sonnet 4.6 (Thinking)'),
+  model('gpt-oss-120b-medium', 'antigravity', 'GPT-OSS-120b (Medium)', 'Modelo aberto 120B', 'Open weight 120B model')
 ]
 
 const effort = (id: Effort, pt: string, en: string): { id: Effort; label: string } => ({

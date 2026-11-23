@@ -220,12 +220,8 @@ export async function detectAntigravity(): Promise<{ status: EngineStatus; model
   let path = await which('agy')
   if (!path && process.platform === 'win32') {
     const local = process.env['LOCALAPPDATA'] ?? ''
-    const candidates = [
-      join(local, 'Programs', 'Antigravity', 'bin', 'agy.cmd'),
-      join(local, 'Programs', 'Antigravity', 'resources', 'app', 'bin', 'agy.cmd'),
-      join(local, 'Programs', 'Antigravity', 'Antigravity.exe')
-    ]
-    path = candidates.find((p) => existsSync(p))
+    const cliExe = join(local, 'agy', 'bin', 'agy.exe')
+    if (existsSync(cliExe)) path = cliExe
   }
   if (!path) return { status: { installed: false, loggedIn: false }, models: [] }
   const [v, list] = await Promise.all([run(path, ['--version']), run(path, ['models'], 15_000)])
@@ -234,7 +230,7 @@ export async function detectAntigravity(): Promise<{ status: EngineStatus; model
     .filter((l) => l.includes('\t'))
     .map((l) => l.split('\t')[0]!.trim())
     .filter(Boolean)
-  const models = parsed.length > 0 ? parsed : antigravityModels()
+  const models = Array.from(new Set([...parsed, ...antigravityModels()]))
   const loggedIn = true
   return {
     status: {

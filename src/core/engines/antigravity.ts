@@ -1,4 +1,4 @@
-import { existsSync, readFileSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { homedir } from 'node:os'
 import { join } from 'node:path'
 import { lastLines, num, parseJson, runCli, type Parser } from './cli'
@@ -118,22 +118,46 @@ export function antigravityArgs(turn: Turn): string[] {
 
 export function antigravityModels(): string[] {
   return [
+    'gemini-4-neon-xhigh',
+    'gemini-4-neon-high',
+    'gemini-4-neon-medium',
+    'gemini-4-neon-low',
+    'gemini-4-carbon-high',
+    'gemini-4-carbon-medium',
+    'gemini-4-carbon-low',
     'gemini-4-argon-high',
     'gemini-4-argon-medium',
     'gemini-4-argon-low',
+    'gemini-4-hydrogen-xhigh',
+    'gemini-4-hydrogen-high',
+    'gemini-4-hydrogen-medium',
+    'gemini-4-hydrogen-low',
     'gemini-3.8-flash-low',
     'gemini-3.8-flash-medium',
     'gemini-3.8-flash-high',
     'claude-opus-5-5-high',
+    'claude-opus-5-5-medium',
+    'claude-opus-5-5-low',
     'claude-sonnet-5-5-high',
+    'claude-sonnet-5-5-medium',
+    'claude-sonnet-5-5-low',
+    'claude-opus-4-6-high',
+    'claude-sonnet-4-6-high',
     'gpt-oss-120b-medium'
   ]
 }
 
-function registerMcpGateway(mcpUrl?: string): () => void {
+export const antigravityAppDir = (dataDir: string): string => join(dataDir, 'antigravity-home')
+
+function registerIsolatedMcpGateway(baseDir: string, mcpUrl?: string): () => void {
   if (!mcpUrl) return () => {}
-  const configPath = join(homedir(), '.gemini', 'config', 'mcp_config.json')
+  const cfgDir = join(baseDir, '.gemini', 'config')
+  const cliDir = join(baseDir, '.gemini', 'antigravity-cli')
+  const configPath = join(cfgDir, 'mcp_config.json')
+  const cliSettingsPath = join(cliDir, 'settings.json')
   try {
+    mkdirSync(cfgDir, { recursive: true })
+    mkdirSync(cliDir, { recursive: true })
     let cfg: { mcpServers?: Record<string, unknown> } = {}
     if (existsSync(configPath)) {
       cfg = JSON.parse(readFileSync(configPath, 'utf8')) as { mcpServers?: Record<string, unknown> }
@@ -144,6 +168,7 @@ function registerMcpGateway(mcpUrl?: string): () => void {
       serverUrl: mcpUrl
     }
     writeFileSync(configPath, JSON.stringify(cfg, null, 2), 'utf8')
+    writeFileSync(cliSettingsPath, JSON.stringify({ mcpServers: cfg.mcpServers }, null, 2), 'utf8')
     return () => {
       try {
         if (existsSync(configPath)) {
@@ -156,22 +181,30 @@ function registerMcpGateway(mcpUrl?: string): () => void {
       } catch {}
     }
   } catch (e) {
-    console.error('[antigravity] failed to register gateway MCP in mcp_config.json', e)
+    console.error('[antigravity] failed to register isolated gateway MCP', e)
     return () => {}
   }
 }
 
-export function antigravityEngine(bin: () => string | undefined, shellEnv: () => Promise<NodeJS.ProcessEnv> = async () => ({})): Engine {
+export function antigravityEngine(
+  bin: () => string | undefined,
+  shellEnv: () => Promise<NodeJS.ProcessEnv> = async () => ({}),
+  appDir: string = join(homedir(), '.elefante-agy')
+): Engine {
   return {
     id: 'antigravity',
     async *run(turn) {
       const path = bin()
       if (!path) {
-        yield { type: 'error', message: L('O Antigravity (agy) não está instalado. Veja em Configurações.', "Antigravity (agy) isn't installed. See Settings.") }
+        yield { type: 'error', message: L('O Antigravity CLI (agy) não está instalado. Veja em Configurações.', "Antigravity CLI (agy) isn't installed. See Settings.") }
         return
       }
-      const cleanupMcp = registerMcpGateway(turn.mcpUrl)
-      const env = { ...process.env, ...(await shellEnv()) }
+      const cleanupMcp = registerIsolatedMcpGateway(appDir, turn.mcpUrl)
+      const env: NodeJS.ProcessEnv = {
+        ...process.env,
+        ...(await shellEnv()),
+        AGY_CONFIG_DIR: join(appDir, '.gemini', 'antigravity-cli')
+      }
       try {
         yield* runCli({
           bin: path,
