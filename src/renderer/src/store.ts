@@ -61,6 +61,7 @@ export type View =
   | { kind: 'providers' }
   | { kind: 'clis' }
   | { kind: 'settings' }
+  | { kind: 'stage' }
   | { kind: 'board'; conversationId?: string } // every project's tasks, or one's
 
 export interface State {
@@ -503,6 +504,11 @@ export const settleDraft = (messageId: string, agentId?: string): void => void c
 
 export async function openDm(agentId: string): Promise<void> {
   const id = await call('openDm', { agentId })
+  navigate({ kind: 'conversation', id })
+}
+
+export async function openProjectChat(parentId: string, agentId: string, fresh = false): Promise<void> {
+  const id = await call('openProjectChat', { parentId, agentId, fresh })
   navigate({ kind: 'conversation', id })
 }
 

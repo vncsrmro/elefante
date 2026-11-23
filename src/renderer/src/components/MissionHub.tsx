@@ -61,12 +61,16 @@ export function MissionHub({ message, todos }: MissionHubProps): ReactNode {
     }
   }, [narrativeSteps.length, order])
 
-  // Auto-scroll checklist to active working todo
+  // Auto-scroll checklist to active working todo (within its own container only)
   useEffect(() => {
-    if (!todosRef.current) return
-    const activeEl = todosRef.current.querySelector('.mission-todo-row.is-working')
+    const box = todosRef.current
+    if (!box) return
+    const activeEl = box.querySelector('.mission-todo-row.is-working') as HTMLElement | null
     if (activeEl) {
-      activeEl.scrollIntoView({ behavior: 'smooth', block: 'nearest' })
+      const top = activeEl.offsetTop - box.offsetTop
+      if (top < box.scrollTop || top + activeEl.offsetHeight > box.scrollTop + box.clientHeight) {
+        box.scrollTop = Math.max(0, top - box.clientHeight / 2)
+      }
     }
   }, [todos])
 

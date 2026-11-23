@@ -1545,6 +1545,47 @@ export function SettingsPage(): ReactNode {
 
         {pane('agentes') && (
           <Card title={L('Navegador dos agentes', 'Agents’ browser')} lead={L('Como o app acha o que o agente pede pra clicar (“o botão Buscar”). Pelo texto é de graça e resolve a maioria; quando não acha, o agente usa o número do elemento.', 'How the app finds what the agent asks to click (“the Search button”). By text it’s free and handles most cases; when it can’t find it, the agent uses the element’s number.')}>
+            <div className="field">
+              <label>{L('Qual navegador os agentes usam', 'Which browser agents use')}</label>
+              <div className="segmented segmented--wide" role="radiogroup" aria-label={L('Qual navegador os agentes usam', 'Which browser agents use')}>
+                {([
+                  ['auto', L('Automático', 'Auto')],
+                  ['builtin', L('Embutido (Elefante)', 'Built-in (Elefante)')],
+                  ['chrome', 'Chrome'],
+                  ['edge', 'Edge'],
+                  ['brave', 'Brave']
+                ] as const).map(([v, label]) => (
+                  <button
+                    key={v}
+                    role="radio"
+                    aria-checked={(settings.browserEngine ?? 'auto') === v}
+                    className={(settings.browserEngine ?? 'auto') === v ? 'is-active' : ''}
+                    onClick={() => updateSettings({ browserEngine: v })}
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
+            </div>
+            <div className="field">
+              <label>{L('Controle de aplicativos do PC', 'PC application control')}</label>
+              <div className="segmented segmented--wide" role="radiogroup" aria-label={L('Controle de aplicativos do PC', 'PC application control')}>
+                {([
+                  ['background', L('Segundo plano (não atrapalha)', 'Background (non-intrusive)')],
+                  ['foreground', L('Na tela (primeiro plano)', 'Foreground (on screen)')]
+                ] as const).map(([v, label]) => (
+                  <button
+                    key={v}
+                    role="radio"
+                    aria-checked={(settings.desktopMode ?? 'background') === v}
+                    className={(settings.desktopMode ?? 'background') === v ? 'is-active' : ''}
+                    onClick={() => updateSettings({ desktopMode: v })}
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
+            </div>
             <div className="segmented segmented--wide" role="radiogroup" aria-label={L('Navegador dos agentes', 'Agents’ browser')}>
               {[false, true].map((v) => (
                 <button key={String(v)} role="radio" aria-checked={!!settings.browserJev === v} className={!!settings.browserJev === v ? 'is-active' : ''} onClick={() => updateSettings({ browserJev: v })}>

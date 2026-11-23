@@ -367,7 +367,12 @@ const chrome =
         serverMode
       )
     : undefined
-const host: BrowserHost = chrome ? (agentId, op, args) => chrome.run(agentId, op, args) : electronHost
+const host: BrowserHost = (agentId, op, args) => {
+  const pref = db.getSettings(DEFAULTS).browserEngine ?? 'auto'
+  if (pref === 'builtin' || !chrome) return electronHost(agentId, op, args)
+  const nextArgs = pref !== 'auto' && !args?.['browser'] ? { ...args, browser: pref } : args
+  return chrome.run(agentId, op, nextArgs)
+}
 
 const secrets = new Secrets(db, fake ? plainCipher : mainCipher(process.parentPort))
 // The person's own apps, through agent-desktop (none on a server: no screen there).
@@ -812,11 +817,38 @@ const api: Api = {
   },
   settleDraft: ({ messageId, agentId }) => settleDraft(messageId, agentId),
   openDm: ({ agentId }) => {
-    const existing = db.conversations().find((c) => c.kind === 'dm' && c.name === agentId)
+    const existing = db.conversations().find((c) => c.kind === 'dm' && !c.parentId && c.name === agentId)
     if (existing) return existing.id
     const id = randomUUID()
     db.createConversation({ id, kind: 'dm', name: agentId, members: [agentId] })
     emitConversations([id])
+    return id
+  },
+  openProjectChat: ({ parentId, agentId, fresh }) => {
+    const parent = db.conversation(parentId)
+    if (!parent) throw new Error('Project conversation not found')
+    if (!fresh) {
+      const existing = db.conversations().find((c) => c.parentId === parentId && c.members.includes(agentId))
+      if (existing) return existing.id
+    }
+    const id = randomUUID()
+    db.createConversation({ id, kind: 'dm', name: agentId, project: parent.project, parentId, members: [agentId] })
+    emitConversations([id])
+    return id
+  },
+  startStage: ({ topic, agentIds, rounds, project }) => {
+    const id = randomUUID()
+    const clean = topic.trim() || L('Debate', 'Debate')
+    db.createConversation({
+      id,
+      kind: 'channel',
+      name: `Palco: ${clean.slice(0, 40)}`,
+      topic: '__stage__',
+      project,
+      members: agentIds
+    })
+    emitConversations([id])
+    void runner.runStage(id, clean, agentIds, Math.max(1, Math.min(6, rounds || 2)))
     return id
   },
 

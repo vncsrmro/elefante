@@ -173,6 +173,7 @@ const MIGRATIONS = [
   `,
   `
   ALTER TABLE conversations ADD COLUMN project TEXT;
+  ALTER TABLE conversations ADD COLUMN parent_id TEXT;
   `,
   `
   ALTER TABLE agents ADD COLUMN web INTEGER NOT NULL DEFAULT 1;
@@ -454,6 +455,7 @@ export class Db {
       kind: str(r['kind']) as Conversation['kind'],
       name: str(r['name']),
       project: r['project'] ? str(r['project']) : undefined,
+      parentId: r['parent_id'] ? str(r['parent_id']) : undefined,
       topic: r['topic'] ? str(r['topic']) : undefined,
       members: members.filter((m) => m.conversation_id === r['id']).map((m) => m.agent_id),
       summary: r['summary'] ? str(r['summary']) : undefined,
@@ -474,7 +476,7 @@ export class Db {
 
   createConversation(c: Omit<Conversation, 'unread'>): void {
     this.tx(() => {
-      this.db.prepare('INSERT INTO conversations (id, kind, name, project, topic, created_at) VALUES (?, ?, ?, ?, ?, ?)').run(c.id, c.kind, c.name, c.project ?? null, c.topic ?? null, Date.now())
+      this.db.prepare('INSERT INTO conversations (id, kind, name, project, parent_id, topic, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)').run(c.id, c.kind, c.name, c.project ?? null, c.parentId ?? null, c.topic ?? null, Date.now())
       for (const m of c.members) this.db.prepare('INSERT INTO members (conversation_id, agent_id) VALUES (?, ?)').run(c.id, m)
     })
   }

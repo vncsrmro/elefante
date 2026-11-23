@@ -310,14 +310,22 @@ export function appOfWindow(w: OpenWin, apps: SystemApp[]): SystemApp | undefine
 // Starts an installed app, with Chromium's accessibility on when it's made with it (an
 // argument a plain program could take for a file to open, so only then). False when it
 // couldn't be started this way (agent-desktop's launch tries next).
-export function startApp(a: SystemApp, platform: NodeJS.Platform = process.platform): Promise<boolean> {
+export function startApp(a: SystemApp, platform: NodeJS.Platform = process.platform, opts: { background?: boolean } = { background: true }): Promise<boolean> {
   const flag = a.chromium ? ['--force-renderer-accessibility'] : []
   return new Promise((resolve) => {
     let cmd: string, args: string[]
     if (platform === 'win32') {
       if (a.id?.includes('!')) (cmd = 'explorer.exe'), (args = [`shell:AppsFolder\\${a.id}`])
-      else if (a.exe) (cmd = a.exe), (args = flag)
-      else return resolve(false)
+      else if (a.exe) {
+        if (opts.background !== false) {
+          const argStr = flag.length ? ` -ArgumentList '${flag.join("','")}'` : ''
+          cmd = 'powershell.exe'
+          args = ['-NoProfile', '-NonInteractive', '-Command', `Start-Process -FilePath '${a.exe.replace(/'/g, "''")}'${argStr} -WindowStyle Minimized`]
+        } else {
+          cmd = a.exe
+          args = flag
+        }
+      } else return resolve(false)
     } else if (a.exec?.length) {
       // A Flatpak or Snap wrapper passes the extra arguments on to the app.
       ;[cmd, ...args] = [...a.exec, ...flag] as [string, ...string[]]

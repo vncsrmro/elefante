@@ -18,6 +18,7 @@ import { Icon } from './components/ui'
 import { ProjectExplorer } from './components/ProjectExplorer'
 import { StatusBar } from './components/StatusBar'
 import { KanbanBoard } from './components/KanbanBoard'
+import { StagePage } from './components/Stage'
 import { OneInboxDrawer } from './components/OneInbox'
 
 export function App(): ReactNode {
@@ -161,6 +162,7 @@ export function App(): ReactNode {
         {view.kind === 'providers' && <ProvidersPage />}
         {view.kind === 'clis' && <CloudClisPage />}
         {view.kind === 'settings' && <SettingsPage />}
+        {view.kind === 'stage' && <StagePage />}
         {view.kind === 'board' && <KanbanBoard conversationId={view.conversationId} />}
       </main>
       {rightPanelOpen && <ProjectExplorer currentProject={activeConv?.project || fallbackProject} />}

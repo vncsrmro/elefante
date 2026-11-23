@@ -39,6 +39,8 @@ export interface Api {
   setChannelMembers(p: { id: string; agentIds: string[] }): void
   deleteConversation(p: { id: string }): void // a channel or a DM, with its messages and routines
   openDm(p: { agentId: string }): string
+  openProjectChat(p: { parentId: string; agentId: string; fresh?: boolean }): string
+  startStage(p: { topic: string; agentIds: string[]; rounds: number; project?: string }): string
   ensureTuca(p: { modelId?: string; fresh?: boolean }): { agentId: string; conversationId: string } // the agent behind the builder screen, with his conversation; fresh starts a new session
   createFromDraft(p: { messageId: string }): { agentId: string; conversationId: string } // the agent a Tuca card proposed
   settleDraft(p: { messageId: string; agentId?: string }): void // the card is done: created elsewhere (the introduction), or dismissed

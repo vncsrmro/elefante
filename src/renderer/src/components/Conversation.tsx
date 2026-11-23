@@ -1,7 +1,7 @@
 import { ProviderMark } from './ProviderMark'
 import { L } from '../../../shared/lang'
 import { CODE_SPANS } from '../../../shared/types'
-import { createContext, useContext, useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react'
+import { createContext, memo, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import Markdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import { call } from '../rpc'
@@ -27,6 +27,8 @@ import {
   modelInfo,
   navigate,
   openDm,
+  openProjectChat,
+  deleteConversation,
   removeRoutine,
   retryRun,
   continueRun,
@@ -81,6 +83,11 @@ export function ConversationView({ id }: { id: string }): ReactNode {
   const [showSummary, setShowSummary] = useState(false)
   const [viewMode, setViewMode] = useState<'chat' | 'board'>('chat')
   const projectTasksCount = useStore((s) => s.tasks.filter((t) => t.conversationId === id).length)
+  const projectRootId = conv?.parentId ?? conv?.id
+  const projectRoot = useStore((s) => s.conversations.find((c) => c.id === projectRootId))
+  const subChats = useStore((s) => s.conversations.filter((c) => c.parentId === projectRootId))
+  const allTeamAgents = useStore((s) => s.agents.filter(isTeam))
+  const [newChatMenuOpen, setNewChatMenuOpen] = useState(false)
   const [cliBadges, setCliBadges] = useState<{ cliId: string; label: string; detail: string }[]>([])
   const [agentMenu, setAgentMenu] = useState<{
     agentId: string
@@ -284,6 +291,81 @@ export function ConversationView({ id }: { id: string }): ReactNode {
           </div>
         </header>
 
+        {projectRoot?.kind === 'channel' && (
+          <div className="project-chats-bar">
+            <button
+              type="button"
+              className={`project-chat-tab ${conv.id === projectRoot.id ? 'is-active' : ''}`}
+              onClick={() => navigate({ kind: 'conversation', id: projectRoot.id })}
+            >
+              <Icon name="hash" size={12} />
+              <span>{L('Geral', 'General')}</span>
+              {(projectRoot.unread ?? 0) > 0 && <span className="project-chat-tab__badge">{projectRoot.unread}</span>}
+            </button>
+            {subChats.map((sc) => {
+              const scAgent = allTeamAgents.find((a) => sc.members.includes(a.id))
+              return (
+                <div key={sc.id} className={`project-chat-tab ${conv.id === sc.id ? 'is-active' : ''}`}>
+                  <button
+                    type="button"
+                    className="project-chat-tab__btn"
+                    onClick={() => navigate({ kind: 'conversation', id: sc.id })}
+                  >
+                    {scAgent && <AgentAvatar agent={scAgent} size={14} />}
+                    <span>{scAgent?.name ?? sc.name}</span>
+                    {(sc.unread ?? 0) > 0 && <span className="project-chat-tab__badge">{sc.unread}</span>}
+                  </button>
+                  <button
+                    type="button"
+                    className="project-chat-tab__close"
+                    title={L('Fechar chat', 'Close chat')}
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      void deleteConversation(sc.id)
+                    }}
+                  >
+                    <Icon name="x" size={10} />
+                  </button>
+                </div>
+              )
+            })}
+            <div className="project-chat-new">
+              <button
+                type="button"
+                className="project-chat-tab project-chat-tab--add"
+                onClick={() => setNewChatMenuOpen((v) => !v)}
+                title={L('Abrir chat individual com um agente neste projeto', 'Open individual chat with an agent in this project')}
+              >
+                <Icon name="plus" size={12} />
+                <span>{L('Chat individual', 'Individual chat')}</span>
+              </button>
+              {newChatMenuOpen && (
+                <div className="project-chat-menu" onMouseLeave={() => setNewChatMenuOpen(false)}>
+                  {allTeamAgents.length === 0 ? (
+                    <div className="muted small" style={{ padding: '6px 10px' }}>{L('Nenhum agente disponível', 'No agents available')}</div>
+                  ) : (
+                    allTeamAgents.map((ag) => (
+                      <button
+                        key={ag.id}
+                        type="button"
+                        className="project-chat-menu__item"
+                        onClick={() => {
+                          setNewChatMenuOpen(false)
+                          void openProjectChat(projectRoot.id, ag.id, true)
+                        }}
+                      >
+                        <AgentAvatar agent={ag} size={16} />
+                        <span>{ag.name}</span>
+                        <span className="muted small">{ag.role}</span>
+                      </button>
+                    ))
+                  )}
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+
         {showSummary && <SummaryPanel conv={conv} messages={messages} onClose={() => setShowSummary(false)} />}
 
         {viewMode === 'board' ? (
@@ -311,14 +393,49 @@ export function ConversationView({ id }: { id: string }): ReactNode {
   )
 }
 
+const PAGE_SIZE = 60
+
 export function MessageList({ messages, conversationId, empty, focus }: { messages: Message[]; conversationId: string; empty?: boolean; focus?: string }): ReactNode {
   const ref = useRef<HTMLDivElement>(null)
   const stick = useRef(true)
+  const [visibleCount, setVisibleCount] = useState(PAGE_SIZE)
+
+  // Reset visible window when switching conversations
+  useEffect(() => {
+    setVisibleCount(PAGE_SIZE)
+    stick.current = true
+  }, [conversationId])
+
+  // If focusing a specific message, ensure it's within the visible window
+  useEffect(() => {
+    if (!focus) return
+    const idx = messages.findIndex((m) => m.id === focus)
+    if (idx >= 0) {
+      const needed = messages.length - idx + 10
+      if (needed > visibleCount) setVisibleCount(needed)
+    }
+  }, [focus, messages, visibleCount])
+
+  const startIdx = Math.max(0, messages.length - visibleCount)
+  const visibleMessages = useMemo(() => messages.slice(startIdx), [messages, startIdx])
+
+  // Precompute the latest message with a browser per agent in O(N) instead of O(N^2) inside each row
+  const latestBrowserByAgent = useMemo(() => {
+    const map = new Map<string, string>()
+    for (let i = messages.length - 1; i >= 0; i--) {
+      const m = messages[i]!
+      if (m.run?.browser && m.author.kind === 'agent' && !map.has(m.author.id)) {
+        map.set(m.author.id, m.id)
+      }
+    }
+    return map
+  }, [messages])
 
   // Opened on a message (a routine's run, say): scroll to it and flash it once.
   useEffect(() => {
-    const i = focus ? messages.findIndex((m) => m.id === focus) : -1
-    const el = i >= 0 ? (ref.current?.children[i] as HTMLElement | undefined) : undefined
+    const i = focus ? visibleMessages.findIndex((m) => m.id === focus) : -1
+    const offset = startIdx > 0 ? 1 : 0 // account for "Load older" button
+    const el = i >= 0 ? (ref.current?.children[i + offset] as HTMLElement | undefined) : undefined
     if (!el) return
     stick.current = false
     el.scrollIntoView({ block: 'center' })
@@ -326,16 +443,13 @@ export function MessageList({ messages, conversationId, empty, focus }: { messag
     const t = setTimeout(() => el.classList.remove('is-flash'), 1800)
     return () => clearTimeout(t)
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [focus, conversationId])
+  }, [focus, conversationId, startIdx])
 
-  useEffect(() => {
-    stick.current = true
-  }, [conversationId])
-
+  const lastMsg = messages[messages.length - 1]
   useLayoutEffect(() => {
     const el = ref.current
     if (el && stick.current) el.scrollTop = el.scrollHeight
-  })
+  }, [messages.length, lastMsg?.text, lastMsg?.run?.steps?.length, lastMsg?.run?.status])
 
   if (messages.length === 0 && empty) {
     return (
@@ -373,8 +487,26 @@ export function MessageList({ messages, conversationId, empty, focus }: { messag
         stick.current = el.scrollHeight - el.scrollTop - el.clientHeight < 60
       }}
     >
-      {messages.map((m, i) => {
-        const prev = messages[i - 1]
+      {startIdx > 0 && (
+        <div className="messages__older">
+          <button
+            type="button"
+            className="btn btn--ghost btn--sm"
+            onClick={() => {
+              const el = ref.current
+              const prevHeight = el?.scrollHeight ?? 0
+              setVisibleCount((c) => c + PAGE_SIZE)
+              requestAnimationFrame(() => {
+                if (el) el.scrollTop += el.scrollHeight - prevHeight
+              })
+            }}
+          >
+            {L(`Carregar mensagens anteriores (${startIdx} ocultas)`, `Load older messages (${startIdx} hidden)`)}
+          </button>
+        </div>
+      )}
+      {visibleMessages.map((m, i) => {
+        const prev = visibleMessages[i - 1]
         const grouped =
           !!prev &&
           prev.author.kind === m.author.kind &&
@@ -383,25 +515,22 @@ export function MessageList({ messages, conversationId, empty, focus }: { messag
           !m.run &&
           m.author.kind !== 'system' &&
           m.author.kind !== 'routine'
-        return <MessageRow key={m.id} message={m} grouped={grouped} />
+        const isLatestBrowser = m.author.kind === 'agent' && latestBrowserByAgent.get(m.author.id) === m.id
+        return <MessageRow key={m.id} message={m} grouped={grouped} isLatestBrowser={isLatestBrowser} />
       })}
     </div>
   )
 }
 
-function MessageRow({ message, grouped }: { message: Message; grouped: boolean }): ReactNode {
+const MessageRow = memo(function MessageRow({ message, grouped, isLatestBrowser }: { message: Message; grouped: boolean; isLatestBrowser: boolean }): ReactNode {
   const { onOpenAgentMenu } = useContext(ConversationContext)
   const me = useStore((s) => s.me)
   const agent = useStore((s) => (message.author.kind === 'agent' ? agentById(s, message.author.id) : undefined))
   const approval = useStore((s) => (message.run?.approvalId ? s.approvals.find((a) => a.id === message.run!.approvalId) : undefined))
   const attached = useStore((s) => (message.author.kind === 'me' ? s.artifacts.filter((a) => a.messageId === message.id && a.agentId === '') : []))
   // The browser shows live on the agent's latest message that used it, unless it's open on the side.
-  const liveBrowser = useStore(
-    (s) =>
-      !!message.run?.browser &&
-      !(s.panel?.kind === 'browser' && s.panel.agentId === agent?.id) &&
-      s.messages.findLast((m) => m.conversationId === message.conversationId && m.run?.browser && m.author.kind === 'agent' && m.author.id === agent?.id)?.id === message.id
-  )
+  const panelOpenForAgent = useStore((s) => s.panel?.kind === 'browser' && s.panel.agentId === agent?.id)
+  const liveBrowser = !!message.run?.browser && isLatestBrowser && !panelOpenForAgent
 
   if (message.author.kind === 'system') {
     return (
@@ -531,7 +660,7 @@ function MessageRow({ message, grouped }: { message: Message; grouped: boolean }
       </div>
     </article>
   )
-}
+})
 
 // What a routine asked, posted at its time; the agent's reply comes next.
 function RoutineMessage({ message }: { message: Message }): ReactNode {
@@ -1012,14 +1141,15 @@ function RunSteps({ message }: { message: Message }): ReactNode {
 }
 
 function TerminalViewer({ output, isRunning, command }: { output: string; isRunning: boolean; command?: string }): ReactNode {
-  const bottomRef = useRef<HTMLDivElement>(null)
+  const bodyRef = useRef<HTMLDivElement>(null)
   const [copied, setCopied] = useState(false)
   const [expanded, setExpanded] = useState(false)
 
+  // Follows the live output inside its own box only. scrollIntoView would also
+  // scroll every ancestor, yanking the whole chat to this terminal.
   useEffect(() => {
-    if (isRunning && bottomRef.current) {
-      bottomRef.current.scrollIntoView({ behavior: 'smooth' })
-    }
+    const el = bodyRef.current
+    if (isRunning && el) el.scrollTop = el.scrollHeight
   }, [output, isRunning])
 
   const copy = (e: React.MouseEvent): void => {
@@ -1069,12 +1199,11 @@ function TerminalViewer({ output, isRunning, command }: { output: string; isRunn
           </button>
         </div>
       </div>
-      <div className="step-terminal__body">
+      <div className="step-terminal__body" ref={bodyRef}>
         <pre className="step-terminal__content">
           {displayOutput}
           {isRunning && <span className="step-terminal__cursor">▌</span>}
         </pre>
-        <div ref={bottomRef} />
       </div>
     </div>
   )

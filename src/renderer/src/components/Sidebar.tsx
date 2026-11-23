@@ -64,8 +64,8 @@ function ProjectGlyph({ name, hasFolder }: { name: string; hasFolder: boolean })
 
 export function Sidebar(): ReactNode {
   const s = useStore((s) => s)
-  const channels = s.conversations.filter((c) => c.kind === 'channel')
-  const dms = s.conversations.filter((c) => c.kind === 'dm' && agentById(s, c.name)?.kind !== 'tuca')
+  const channels = s.conversations.filter((c) => c.kind === 'channel' && c.topic !== '__stage__')
+  const dms = s.conversations.filter((c) => c.kind === 'dm' && !c.parentId && agentById(s, c.name)?.kind !== 'tuca')
   const pending = pendingApprovals(s).length
   const suggestions = pendingMemories(s).length
   const proposals = s.skills.filter((k) => k.state === 'pending').length
@@ -204,6 +204,7 @@ export function Sidebar(): ReactNode {
           </button>
           <NavItem view={{ kind: 'approvals' }} icon="shield" label={L('Aprovações', 'Approvals')} badge={pending} />
           <NavItem view={{ kind: 'board' }} icon="board" label={L('Quadro de Tarefas', 'Task Board')} badge={s.tasks.filter((t) => t.status === 'in_progress').length || undefined} />
+          <NavItem view={{ kind: 'stage' }} icon="users" label={L('Palco', 'Stage')} />
           <NavItem view={{ kind: 'governance' }} icon="sitemap" label={L('Governança (Hierarquia)', 'Governance (Hierarchy)')} />
           <NavItem view={{ kind: 'memory' }} icon="book" label={L('Memória', 'Memory')} badge={suggestions} />
           <NavItem view={{ kind: 'routines' }} icon="clock" label={L('Rotinas', 'Routines')} />

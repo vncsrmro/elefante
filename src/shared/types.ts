@@ -112,6 +112,7 @@ export interface Conversation {
   kind: 'channel' | 'dm'
   name: string // channel/project name, or agent id for a DM
   project?: string // absolute path on disk when this conversation is bound to a local project folder
+  parentId?: string // parent project conversation id when this is an individual chat inside a project
   topic?: string
   members: string[] // agent ids
   summary?: string // what the conversation covered before its recent messages
@@ -269,6 +270,8 @@ export interface Settings {
   routerModel: string // a model id, or 'jev' for TypeSafe's Jev (falls back to Haiku)
   jevKey?: boolean // a TypeSafe key is saved (the key itself never leaves the core)
   browserJev?: boolean // Jev finds what agents click in their browsers (each click sends the page to TypeSafe)
+  browserEngine?: 'auto' | 'builtin' | 'chrome' | 'edge' | 'brave' // which browser engine agents use
+  desktopMode?: 'background' | 'foreground' // how agents control desktop apps on Windows (default: background)
   memoryModel: string // summarizes conversations and extracts memories
   memoryLearning: 'approve' | 'auto' | 'off' // what extracted memories about me become
   defaultLimit: number

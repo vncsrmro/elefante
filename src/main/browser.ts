@@ -68,12 +68,12 @@ export class Browsers {
     win.on('close', (e) => {
       if (this.quitting) return
       e.preventDefault()
+      void session.fromPartition(this.partition(agentId)).cookies.flushStore().catch(() => {})
       win.hide()
-      this.fresh(agentId, win)
     })
     win.on('hide', () => {
+      void session.fromPartition(this.partition(agentId)).cookies.flushStore().catch(() => {})
       this.onShown(agentId, false)
-      setImmediate(() => this.fresh(agentId, win))
     })
     win.on('show', () => this.onShown(agentId, true))
     this.wins.set(agentId, win)
@@ -119,8 +119,8 @@ export class Browsers {
         win.focus()
         return here()
       case 'hide':
+        await session.fromPartition(this.partition(agentId)).cookies.flushStore().catch(() => {})
         win.hide()
-        this.fresh(agentId, win)
         return { url: wc.getURL(), title: wc.getTitle(), shown: false }
       case 'open': {
         const url = String(args['url'] ?? '')

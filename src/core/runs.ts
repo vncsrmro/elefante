@@ -357,6 +357,37 @@ export class Runner {
       .join(' ')
   }
 
+  // Runs a multi-agent debate on the Stage ("Palco"): each agent speaks in turn
+  // across `rounds` rounds, seeing everything said so far.
+  async runStage(conversationId: string, topic: string, agentIds: string[], rounds: number): Promise<void> {
+    const { db, emit } = this.deps
+    const conv = db.conversation(conversationId)
+    if (!conv) return
+    const ask: Message = {
+      id: randomUUID(),
+      conversationId,
+      author: { kind: 'me' },
+      text: topic.trim(),
+      at: Date.now()
+    }
+    db.saveMessage(ask)
+    emit({ type: 'message', message: ask })
+
+    for (let r = 1; r <= rounds; r++) {
+      for (const agentId of agentIds) {
+        const agent = db.agent(agentId)
+        if (!agent || agent.archived) continue
+        const task = L(
+          `[Palco · Rodada ${r}/${rounds}] Tema em debate: "${topic}". Leia o que os outros agentes já disseram acima, concorde, discorde com argumentos ou proponha melhorias. Seja direto e construtivo.`,
+          `[Stage · Round ${r}/${rounds}] Topic: "${topic}". Read what the other agents said above, agree, disagree with reasoning, or propose improvements. Be direct and constructive.`
+        )
+        await new Promise<void>((resolve) => {
+          this.enqueue(() => this.execute(agent, conv, { depth: 1, task }).then(() => resolve(), () => resolve()))
+        })
+      }
+    }
+  }
+
   // Resolves when nothing is routing, running or queued (tests and shutdown).
   idle(): Promise<void> {
     if (this.isIdle()) return Promise.resolve()
