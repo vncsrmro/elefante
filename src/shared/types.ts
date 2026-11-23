@@ -393,7 +393,7 @@ export const ENGINES: Record<EngineId, { label: string; cli: string; login: stri
   opencode: { label: 'OpenCode', cli: 'opencode', login: 'opencode auth login', install: 'curl -fsSL https://opencode.ai/install | bash', windows: 'npm install -g opencode-ai', site: 'https://opencode.ai' },
   pi: { label: 'Pi', cli: 'pi', login: 'pi', install: 'npm install -g @earendil-works/pi-coding-agent', site: 'https://pi.dev' },
   gemini: { label: 'Gemini CLI', cli: 'gemini', login: 'gemini', install: 'npm install -g @google/gemini-cli', site: 'https://github.com/google-gemini/gemini-cli' },
-  antigravity: { label: 'Antigravity', cli: 'agy', login: 'agy', install: 'agy install', site: 'https://antigravity.google' }
+  antigravity: { label: 'Antigravity', cli: 'agy', login: 'agy', install: 'winget install Google.Antigravity', site: 'https://antigravity.google' }
 }
 export const ENGINE_IDS = Object.keys(ENGINES) as EngineId[]
 
