@@ -1,5 +1,5 @@
 import { DatabaseSync } from 'node:sqlite'
-import { CACHE_READ_WEIGHT, type Agent, type AgentApp, type AgentColor, type Approval, type ApprovalState, type Artifact, type ArtifactKind, type Author, type Connector, type ConnectorAuth, type ConnectorTool, type Conversation, type Effort, type LentFolder, type Memory, type MemoryCategory, type MemoryMode, type MemoryState, type Message, type Receipt, type Routine, type RoutineRun, type Run, type Settings, type Skill, type SkillVersion, type Task, type ToolClass, type Trigger } from '../shared/types'
+import { CACHE_READ_WEIGHT, type Agent, type AgentApp, type AgentColor, type Approval, type ApprovalState, type Artifact, type ArtifactKind, type Author, type Connector, type ConnectorAuth, type ConnectorTool, type Conversation, type Effort, type LentFolder, type Memory, type MemoryCategory, type MemoryMode, type MemoryState, type Message, type Receipt, type Routine, type RoutineRun, type Run, type Settings, type Skill, type SkillVersion, type Squad, type SquadAutonomy, type SquadMode, type Task, type ToolClass, type Trigger } from '../shared/types'
 
 // Each entry runs once, in order; PRAGMA user_version records how far we got.
 const MIGRATIONS = [
@@ -174,6 +174,18 @@ const MIGRATIONS = [
   `
   ALTER TABLE conversations ADD COLUMN project TEXT;
   ALTER TABLE conversations ADD COLUMN parent_id TEXT;
+  CREATE TABLE IF NOT EXISTS squads (
+    id TEXT PRIMARY KEY,
+    name TEXT NOT NULL,
+    description TEXT,
+    color TEXT,
+    mode TEXT NOT NULL,
+    autonomy TEXT NOT NULL,
+    chief_id TEXT,
+    agent_ids TEXT NOT NULL,
+    project TEXT,
+    created_at INTEGER NOT NULL
+  );
   `,
   `
   ALTER TABLE agents ADD COLUMN web INTEGER NOT NULL DEFAULT 1;
@@ -1041,5 +1053,34 @@ export class Db {
 
   addSkillVersion(v: Omit<SkillVersion, 'id'>): void {
     this.db.prepare('INSERT INTO skill_versions (skill_id, name, description, body, by, at) VALUES (?, ?, ?, ?, ?, ?)').run(v.skillId, v.name, v.description, v.body, v.by, v.at)
+  }
+
+  // ---------- squads ----------
+
+  squads(): Squad[] {
+    return (this.db.prepare('SELECT * FROM squads ORDER BY created_at').all() as Row[]).map((r) => ({
+      id: str(r['id']),
+      name: str(r['name']),
+      description: r['description'] ? str(r['description']) : undefined,
+      color: r['color'] ? str(r['color']) : undefined,
+      mode: (str(r['mode']) || 'hierarchical') as SquadMode,
+      autonomy: (str(r['autonomy']) || 'autonomous') as SquadAutonomy,
+      chiefId: r['chief_id'] ? str(r['chief_id']) : undefined,
+      agentIds: json<string[]>(r['agent_ids'], []),
+      project: r['project'] ? str(r['project']) : undefined,
+      createdAt: Number(r['created_at'])
+    }))
+  }
+
+  saveSquad(s: Squad): void {
+    this.db
+      .prepare(
+        'INSERT INTO squads (id, name, description, color, mode, autonomy, chief_id, agent_ids, project, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?) ON CONFLICT(id) DO UPDATE SET name=excluded.name, description=excluded.description, color=excluded.color, mode=excluded.mode, autonomy=excluded.autonomy, chief_id=excluded.chief_id, agent_ids=excluded.agent_ids, project=excluded.project'
+      )
+      .run(s.id, s.name, s.description ?? null, s.color ?? null, s.mode, s.autonomy, s.chiefId ?? null, JSON.stringify(s.agentIds), s.project ?? null, s.createdAt)
+  }
+
+  removeSquad(id: string): void {
+    this.db.prepare('DELETE FROM squads WHERE id = ?').run(id)
   }
 }

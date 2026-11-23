@@ -641,6 +641,22 @@ export interface Schedule {
 // What starts a routine other than the clock (spec §17). The app is local, so
 // nothing from the internet can call it: it checks a connector every few
 // minutes, or listens on the Mac itself for a script, a git hook, Xcode…
+export type SquadMode = 'hierarchical' | 'pipeline' | 'debate'
+export type SquadAutonomy = 'autonomous' | 'supervised' | 'paused'
+
+export interface Squad {
+  id: string
+  name: string
+  description?: string
+  color?: string
+  mode: SquadMode
+  autonomy: SquadAutonomy
+  chiefId?: string // leader agent id in hierarchical mode
+  agentIds: string[]
+  project?: string // optional default project folder
+  createdAt: number
+}
+
 export type Trigger =
   | {
       kind: 'poll'

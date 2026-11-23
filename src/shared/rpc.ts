@@ -1,5 +1,5 @@
 // The contract between the renderer and the core, carried over a MessagePort.
-import type { Os, Agent, ApiProviderId, BrowserInput, Approval, Artifact, ImageUpload, BrowserView, CloudCliId, CloudCliInfo, ComputerInfo, Connector, ConnectorInput, ConnectorTool, HarnessMcp, Conversation, EngineId, HostDiscoveryResult, Memory, MemoryCategory, MemoryScope, Message, ProjectCliContext, ProjectFileItem, ProjectFileInfo, Routine, RoutineInput, Report, Settings, LocalSkill, Skill, SkillInput, SkillVersion, Task, TaskInput, TaskStatus, Trigger, UsageReport } from './types'
+import type { Os, Agent, ApiProviderId, BrowserInput, Approval, Artifact, ImageUpload, BrowserView, CloudCliId, CloudCliInfo, ComputerInfo, Connector, ConnectorInput, ConnectorTool, HarnessMcp, Conversation, EngineId, HostDiscoveryResult, Memory, MemoryCategory, MemoryScope, Message, ProjectCliContext, ProjectFileItem, ProjectFileInfo, Routine, RoutineInput, Report, Settings, LocalSkill, Skill, SkillInput, SkillVersion, Squad, Task, TaskInput, TaskStatus, Trigger, UsageReport } from './types'
 
 export interface Snapshot {
   settings: Settings
@@ -15,6 +15,7 @@ export interface Snapshot {
   routines: Routine[]
   skills: Skill[]
   tasks: Task[]
+  squads: Squad[]
   platform: Os
   packaged: boolean // installed app, not `npm run dev` (opening at login only works there)
   demoServer?: { command: string; args: string[] } // the bundled demo connector, when available
@@ -41,6 +42,8 @@ export interface Api {
   openDm(p: { agentId: string }): string
   openProjectChat(p: { parentId: string; agentId: string; fresh?: boolean }): string
   startStage(p: { topic: string; agentIds: string[]; rounds: number; project?: string }): string
+  saveSquad(p: { squad: Omit<Squad, 'createdAt'> & { createdAt?: number } }): Squad
+  removeSquad(p: { id: string }): void
   ensureTuca(p: { modelId?: string; fresh?: boolean }): { agentId: string; conversationId: string } // the agent behind the builder screen, with his conversation; fresh starts a new session
   createFromDraft(p: { messageId: string }): { agentId: string; conversationId: string } // the agent a Tuca card proposed
   settleDraft(p: { messageId: string; agentId?: string }): void // the card is done: created elsewhere (the introduction), or dismissed
@@ -144,6 +147,8 @@ export type CoreEvent =
   | { type: 'skill_removed'; id: string }
   | { type: 'task'; task: Task }
   | { type: 'task_removed'; id: string }
+  | { type: 'squad'; squad: Squad }
+  | { type: 'squad_removed'; id: string }
 
 export type Request = { id: number; method: Method; params: unknown }
 export type Response = { id: number; result?: unknown; error?: string }

@@ -669,6 +669,7 @@ const api: Api = {
     routines: db.routines(),
     skills: db.skills(),
     tasks: tasks.list(),
+    squads: db.squads(),
     platform: osOf(),
     packaged: process.env['ELEFANTE_PACKAGED'] === '1',
     demoServer: existsSync(demoPath) ? { command: 'node', args: [demoPath] } : undefined
@@ -850,6 +851,20 @@ const api: Api = {
     emitConversations([id])
     void runner.runStage(id, clean, agentIds, Math.max(1, Math.min(6, rounds || 2)))
     return id
+  },
+  saveSquad: ({ squad }) => {
+    const full = {
+      ...squad,
+      id: squad.id || randomUUID(),
+      createdAt: squad.createdAt ?? Date.now()
+    }
+    db.saveSquad(full)
+    emit({ type: 'squad', squad: full })
+    return full
+  },
+  removeSquad: ({ id }) => {
+    db.removeSquad(id)
+    emit({ type: 'squad_removed', id })
   },
 
   saveSkill: ({ skill }) => skills.save(skill),

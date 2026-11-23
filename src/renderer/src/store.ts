@@ -31,6 +31,7 @@ import {
   type Skill,
   type SkillInput,
   type SkillVersion,
+  type Squad,
   type Task,
   type TaskInput,
   type TaskStatus,
@@ -83,6 +84,7 @@ export interface State {
   routines: Routine[]
   skills: Skill[]
   tasks: Task[]
+  squads: Squad[]
   taskOpen: string | null // the card open in the task drawer
   inboxOpen: boolean // the "waiting on you" popover
   platform: Os
@@ -142,6 +144,7 @@ let state: State = {
   routines: [],
   skills: [],
   tasks: [],
+  squads: [],
   taskOpen: null,
   inboxOpen: false,
   platform: 'mac',
@@ -286,6 +289,10 @@ function apply(e: CoreEvent): void {
         return { ...s, tasks: upsert(s.tasks, e.task).sort((a, b) => a.number - b.number) }
       case 'task_removed':
         return { ...s, tasks: s.tasks.filter((t) => t.id !== e.id), taskOpen: s.taskOpen === e.id ? null : s.taskOpen }
+      case 'squad':
+        return { ...s, squads: upsert(s.squads, e.squad) }
+      case 'squad_removed':
+        return { ...s, squads: s.squads.filter((q) => q.id !== e.id) }
     }
   })
 }
@@ -318,6 +325,7 @@ export async function start(): Promise<void> {
       routines: snap.routines,
       skills: snap.skills,
       tasks: snap.tasks ?? [],
+      squads: snap.squads ?? [],
       platform: snap.platform,
       packaged: snap.packaged,
       demoServer: snap.demoServer
@@ -671,5 +679,7 @@ export const removeTask = (id: string): void => {
   void call('removeTask', { id })
 }
 export const setTaskOpen = (taskOpen: string | null): void => set((s) => ({ ...s, taskOpen }))
+export const saveSquad = (squad: Omit<Squad, 'createdAt'> & { createdAt?: number }): Promise<Squad> => call('saveSquad', { squad })
+export const removeSquad = (id: string): void => void call('removeSquad', { id })
 export const setInboxOpen = (inboxOpen: boolean): void => set((s) => ({ ...s, inboxOpen }))
 export const toggleInboxOpen = (): void => set((s) => ({ ...s, inboxOpen: !s.inboxOpen }))
