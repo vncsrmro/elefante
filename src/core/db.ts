@@ -173,19 +173,6 @@ const MIGRATIONS = [
   `,
   `
   ALTER TABLE conversations ADD COLUMN project TEXT;
-  ALTER TABLE conversations ADD COLUMN parent_id TEXT;
-  CREATE TABLE IF NOT EXISTS squads (
-    id TEXT PRIMARY KEY,
-    name TEXT NOT NULL,
-    description TEXT,
-    color TEXT,
-    mode TEXT NOT NULL,
-    autonomy TEXT NOT NULL,
-    chief_id TEXT,
-    agent_ids TEXT NOT NULL,
-    project TEXT,
-    created_at INTEGER NOT NULL
-  );
   `,
   `
   ALTER TABLE agents ADD COLUMN web INTEGER NOT NULL DEFAULT 1;
@@ -256,6 +243,21 @@ const MIGRATIONS = [
   );
   CREATE INDEX tasks_by_conversation ON tasks (conversation_id);
   CREATE INDEX tasks_by_message ON tasks (message_id);
+  `,
+  `
+  ALTER TABLE conversations ADD COLUMN parent_id TEXT;
+  CREATE TABLE IF NOT EXISTS squads (
+    id TEXT PRIMARY KEY,
+    name TEXT NOT NULL,
+    description TEXT,
+    color TEXT,
+    mode TEXT NOT NULL,
+    autonomy TEXT NOT NULL,
+    chief_id TEXT,
+    agent_ids TEXT NOT NULL,
+    project TEXT,
+    created_at INTEGER NOT NULL
+  );
   `
 ]
 
