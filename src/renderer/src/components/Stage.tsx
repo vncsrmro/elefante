@@ -10,6 +10,7 @@ import {
   sendMessage,
   stopRun,
   useStore,
+  type Agent,
   type Squad,
   type SquadAutonomy,
   type SquadMode
@@ -49,7 +50,7 @@ export function StagePage(): ReactNode {
 
   const chiefAgent = useMemo(() => {
     if (activeSquad?.chiefId) return officeAgents.find((a) => a.id === activeSquad.chiefId)
-    return officeAgents.find((a) => a.isChief)
+    return officeAgents.find((a) => !a.reportsTo)
   }, [officeAgents, activeSquad])
 
   const teamAgents = useMemo(() => {
@@ -288,7 +289,7 @@ export function StagePage(): ReactNode {
                 <div className="muted small">{L('Nenhuma atividade recente neste Squad.', 'No recent activity in this Squad.')}</div>
               ) : (
                 wiretapFeed.map((m) => {
-                  const ag = m.author.kind === 'agent' ? agents.find((a) => a.id === m.author.id) : undefined
+                  const ag = m.author.kind === 'agent' ? agents.find((a) => a.id === (m.author as { kind: 'agent'; id: string }).id) : undefined
                   if (!ag) return null
                   return (
                     <div key={m.id} style={{ padding: 8, borderRadius: 8, background: 'var(--bg-2, rgba(255,255,255,0.03))', fontSize: 12 }}>
@@ -458,7 +459,7 @@ function OfficeDesk({
   activity,
   isChief
 }: {
-  agent: ReturnType<typeof useStore<ReturnType<typeof isTeam> extends boolean ? never : never>> extends never ? never : import('../store').Agent
+  agent: Agent
   activity?: { status: 'working' | 'waiting' | 'idle'; label: string; at: number }
   isChief?: boolean
 }): ReactNode {

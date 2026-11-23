@@ -1066,7 +1066,7 @@ export class Db {
       mode: (str(r['mode']) || 'hierarchical') as SquadMode,
       autonomy: (str(r['autonomy']) || 'autonomous') as SquadAutonomy,
       chiefId: r['chief_id'] ? str(r['chief_id']) : undefined,
-      agentIds: json<string[]>(r['agent_ids'], []),
+      agentIds: JSON.parse(str(r['agent_ids']) || '[]') as string[],
       project: r['project'] ? str(r['project']) : undefined,
       createdAt: Number(r['created_at'])
     }))
