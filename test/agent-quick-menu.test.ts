@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { readFileSync } from 'node:fs'
+import { existsSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { chromium } from 'playwright'
@@ -62,10 +62,10 @@ describe('Agent Quick Menu & Model Switching', () => {
     expect(custom?.label).toBe('openrouter/anthropic/claude-3.7-sonnet')
   })
 
-  it.skipIf(!hasChrome())(
+  it.skipIf(!existsSync(chromium.executablePath()))(
     'never overflows horizontally even with long model names and expanded picker',
     async () => {
-      const browser = await chromium.launch({ channel: 'chrome', headless: true, timeout: 15_000 })
+      const browser = await chromium.launch({ headless: true })
       try {
         const page = await browser.newPage({ viewport: { width: 900, height: 800 } })
         const css = readFileSync(join(root, 'src/renderer/src/styles.css'), 'utf8')

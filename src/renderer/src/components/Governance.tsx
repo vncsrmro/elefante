@@ -2,6 +2,7 @@ import { useState, useMemo, type ReactNode } from 'react'
 import { L } from '../../../shared/lang'
 import {
   type Agent,
+  type Squad,
   navigate,
   navigateBack,
   openDm,
@@ -46,6 +47,14 @@ const getDeptMeta = (name?: string): DepartmentMeta => {
   return { id: clean, name: clean, color: c.color, icon: 'folder', bgColor: c.bgColor }
 }
 
+interface ModularTeam {
+  teamName: string
+  squad?: Squad
+  director?: Agent
+  subordinates: Agent[]
+  members: Agent[]
+}
+
 export function GovernancePage(): ReactNode {
   const agents = useStore((s) => s.agents)
   const squads = useStore((s) => s.squads)
@@ -58,6 +67,7 @@ export function GovernancePage(): ReactNode {
     if (initialFocusId) return agents.find((a) => a.id === initialFocusId) ?? null
     return null
   })
+  const [editingTeam, setEditingTeam] = useState<ModularTeam | null>(null)
   const [newTeamModalOpen, setNewTeamModalOpen] = useState(false)
   const [newTeamName, setNewTeamName] = useState('')
   const [newTeamDirectorId, setNewTeamDirectorId] = useState('')
@@ -83,7 +93,7 @@ export function GovernancePage(): ReactNode {
   }, [agents, fante])
 
   // Modular Teams / Squads: union of saved squads and distinct agent.department values
-  const modularTeams = useMemo(() => {
+  const modularTeams = useMemo<ModularTeam[]>(() => {
     const teamNames = new Set<string>()
     for (const sq of squads) if (sq.name.trim()) teamNames.add(sq.name.trim())
     for (const a of teamAgents) if (a.department?.trim()) teamNames.add(a.department.trim())
@@ -94,9 +104,6 @@ export function GovernancePage(): ReactNode {
       const members = teamAgents.filter(
         (a) => (a.department?.trim() || 'Geral').toLowerCase() === teamName.toLowerCase()
       )
-      // Find the Director of this team:
-      // 1) sq.chiefId, 2) agent whose id/name is referenced by others' reportsTo/responsible,
-      // 3) agent with responsible === 'Você (Fundador)' or reportsTo === 'founder', 4) first member
       let director: Agent | undefined = sq?.chiefId ? members.find((m) => m.id === sq.chiefId) : undefined
       if (!director) {
         director = members.find((m) =>
@@ -138,7 +145,6 @@ export function GovernancePage(): ReactNode {
       responsibleRole: isDirector ? 'Diretor' : teamName
     })
 
-    // Also keep squad record in sync if one exists
     const sq = squads.find((s) => s.name.toLowerCase() === teamName.toLowerCase())
     if (sq && !sq.agentIds.includes(agent.id)) {
       void saveSquad({ ...sq, agentIds: [...sq.agentIds, agent.id] })
@@ -265,7 +271,6 @@ export function GovernancePage(): ReactNode {
             {/* TOP LEVEL: Founder (You) + Fante (Bot Creator) side by side */}
             <div className="gov-root-wrapper">
               <div style={{ display: 'flex', alignItems: 'center', gap: 18, flexWrap: 'wrap', justifyContent: 'center' }}>
-                {/* Founder Card */}
                 <div className="gov-root-card" style={{ borderColor: 'var(--accent)' }}>
                   <div className="gov-root-avatar-wrap">
                     <MeAvatar initials={me.initials} size={38} />
@@ -277,7 +282,6 @@ export function GovernancePage(): ReactNode {
                   </div>
                 </div>
 
-                {/* Fante: Bot Creator & Right Hand */}
                 <div
                   className="gov-root-card"
                   style={{ cursor: 'pointer', opacity: 0.95 }}
@@ -332,33 +336,52 @@ export function GovernancePage(): ReactNode {
                       {/* Team Header + Director Card */}
                       <div
                         className="gov-leader-card"
-                        style={{ borderColor: isTarget ? dept.color : undefined, minWidth: 230 }}
+                        style={{ borderColor: isTarget ? dept.color : undefined, width: '100%', padding: '12px' }}
                       >
-                        <div className="gov-dept-pill" style={{ backgroundColor: dept.bgColor, color: dept.color, marginBottom: 8 }}>
-                          <span className="gov-dept-icon-dot" style={{ backgroundColor: dept.color }} />
-                          <span style={{ fontWeight: 700 }}>{team.teamName}</span>
+                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', width: '100%', marginBottom: 8, gap: 6 }}>
+                          <div
+                            className="gov-dept-pill"
+                            style={{ backgroundColor: dept.bgColor, color: dept.color, cursor: 'pointer', flex: 1, justifyContent: 'center' }}
+                            onClick={() => setEditingTeam(team)}
+                            title={L('Clique para renomear ou editar esta equipe', 'Click to rename or edit this squad')}
+                          >
+                            <span className="gov-dept-icon-dot" style={{ backgroundColor: dept.color }} />
+                            <span style={{ fontWeight: 700, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{team.teamName}</span>
+                          </div>
+                          <button
+                            type="button"
+                            className="icon-btn icon-btn--sm"
+                            title={L(`Editar equipe ${team.teamName}`, `Edit team ${team.teamName}`)}
+                            onClick={() => setEditingTeam(team)}
+                          >
+                            <Icon name="edit" size={12} />
+                          </button>
                         </div>
 
                         {dir ? (
                           <div
-                            style={{ display: 'flex', alignItems: 'center', gap: 10, width: '100%', padding: '6px 8px', borderRadius: 8, background: 'rgba(255,255,255,0.03)', cursor: 'pointer' }}
+                            style={{ display: 'flex', alignItems: 'center', gap: 10, width: '100%', padding: '8px 10px', borderRadius: 9, background: 'rgba(255,255,255,0.04)', cursor: 'pointer' }}
                             onClick={() => setEditingAgent(dir)}
                             title={L(`Diretor da equipe ${team.teamName} · Clique para configurar`, `Director of ${team.teamName} · Click to configure`)}
                           >
                             <AgentAvatar agent={dir} size={32} />
                             <div style={{ textAlign: 'left', minWidth: 0, flex: 1 }}>
-                              <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
+                              <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
                                 <strong style={{ fontSize: 13, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{dir.name}</strong>
-                                <span className="tag" style={{ fontSize: 10, padding: '1px 5px' }}>{L('Diretor', 'Director')}</span>
+                                <span className="tag" style={{ fontSize: 10, padding: '1px 5px', flexShrink: 0 }}>{L('Diretor', 'Director')}</span>
                               </div>
-                              <div className="muted small" style={{ fontSize: 11, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                              <div className="muted small" style={{ fontSize: 11, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', marginTop: 2 }}>
                                 {dir.role || L('Coordenação da equipe', 'Squad Director')}
                               </div>
                             </div>
                           </div>
                         ) : (
-                          <div className="muted small" style={{ padding: '6px 0' }}>
-                            {L('Sem diretor definido ainda', 'No director assigned yet')}
+                          <div
+                            className="muted small"
+                            style={{ padding: '8px 0', cursor: 'pointer' }}
+                            onClick={() => setEditingTeam(team)}
+                          >
+                            {L('Sem diretor · Clique para definir', 'No director · Click to assign')}
                           </div>
                         )}
 
@@ -372,7 +395,7 @@ export function GovernancePage(): ReactNode {
                       <div className="gov-stem-under-leader" />
 
                       {/* Subordinates in this Team */}
-                      <div className="gov-agent-leaves-list">
+                      <div className="gov-agent-leaves-list" style={{ width: '100%' }}>
                         {team.subordinates.map((agent) => {
                           const isBeingDragged = draggedAgentId === agent.id
                           return (
@@ -389,6 +412,7 @@ export function GovernancePage(): ReactNode {
                                 setDragOverTeam(null)
                               }}
                               className={`gov-agent-leaf-card ${isBeingDragged ? 'is-dragging' : ''}`}
+                              style={{ width: '100%' }}
                               onClick={() => setEditingAgent(agent)}
                               title={L(`Responde a ${dir?.name ?? 'Você'} · Arraste para mover ou clique para editar`, `Reports to ${dir?.name ?? 'You'} · Drag to move or click to edit`)}
                             >
@@ -419,6 +443,7 @@ export function GovernancePage(): ReactNode {
 
                         <button
                           className="gov-add-leaf-btn"
+                          style={{ width: '100%' }}
                           onClick={() => {
                             const draft = newAgentDraft()
                             draft.department = team.teamName
@@ -466,23 +491,27 @@ export function GovernancePage(): ReactNode {
                   }}
                 >
                   <div className="gov-dept-card__header">
-                    <div className="gov-dept-badge" style={{ backgroundColor: dept.bgColor, color: dept.color }}>
+                    <div
+                      className="gov-dept-badge"
+                      style={{ backgroundColor: dept.bgColor, color: dept.color, cursor: 'pointer' }}
+                      onClick={() => setEditingTeam(team)}
+                    >
                       <span className="gov-dept-icon-dot" style={{ backgroundColor: dept.color }} />
                       <span className="gov-dept-name">{team.teamName}</span>
                     </div>
-                    <span className="gov-dept-count">
-                      {team.members.length} {team.members.length === 1 ? L('agente', 'agent') : L('agentes', 'agents')}
-                    </span>
-                    {team.squad && team.members.length === 0 && (
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                      <span className="gov-dept-count">
+                        {team.members.length} {team.members.length === 1 ? L('agente', 'agent') : L('agentes', 'agents')}
+                      </span>
                       <button
                         type="button"
                         className="icon-btn icon-btn--sm"
-                        title={L('Remover equipe vazia', 'Remove empty squad')}
-                        onClick={() => removeSquad(team.squad!.id)}
+                        title={L(`Editar equipe ${team.teamName}`, `Edit team ${team.teamName}`)}
+                        onClick={() => setEditingTeam(team)}
                       >
-                        <Icon name="x" size={12} />
+                        <Icon name="edit" size={12} />
                       </button>
-                    )}
+                    </div>
                   </div>
 
                   {team.director && (
@@ -563,13 +592,25 @@ export function GovernancePage(): ReactNode {
         />
       )}
 
+      {editingTeam && (
+        <EditTeamModal
+          team={editingTeam}
+          allAgents={teamAgents}
+          onClose={() => setEditingTeam(null)}
+          onSaved={(msg) => {
+            setEditingTeam(null)
+            showToast(msg)
+          }}
+        />
+      )}
+
       {newTeamModalOpen && (
         <div className="gov-modal-backdrop" onClick={() => setNewTeamModalOpen(false)}>
           <div className="gov-modal" onClick={(e) => e.stopPropagation()}>
             <div className="gov-modal__header">
               <div>
                 <h2 className="gov-modal__title">{L('Nova Equipe / Squad Modular', 'New Modular Team / Squad')}</h2>
-                <span className="gov-modal__subtitle">{L('Ex.: Little Faith Squad, romei.ro, Atendimento Clientes…', 'E.g. Little Faith Squad, romei.ro, Client Support…')}</span>
+                <span className="gov-modal__subtitle">{L('Ex.: Produto & SaaS, Estúdio de Conteúdo, Atendimento…', 'E.g. Product & SaaS, Content Studio, Support…')}</span>
               </div>
               <button className="icon-btn" onClick={() => setNewTeamModalOpen(false)}>
                 <Icon name="x" size={16} />
@@ -581,7 +622,7 @@ export function GovernancePage(): ReactNode {
                 <input
                   className="gov-input"
                   value={newTeamName}
-                  placeholder={L('Ex.: romei.ro', 'E.g. romei.ro')}
+                  placeholder={L('Ex.: Engenharia & Produto', 'E.g. Engineering & Product')}
                   onChange={(e) => setNewTeamName(e.target.value)}
                   autoFocus
                 />
@@ -615,6 +656,135 @@ export function GovernancePage(): ReactNode {
   )
 }
 
+function EditTeamModal({
+  team,
+  allAgents,
+  onClose,
+  onSaved
+}: {
+  team: ModularTeam
+  allAgents: Agent[]
+  onClose: () => void
+  onSaved: (msg: string) => void
+}): ReactNode {
+  const [name, setName] = useState(team.teamName)
+  const [directorId, setDirectorId] = useState(team.director?.id ?? '')
+
+  const handleSave = async (): Promise<void> => {
+    const clean = name.trim() || team.teamName
+    const dir = allAgents.find((a) => a.id === directorId)
+
+    // Update or create Squad record
+    if (team.squad) {
+      const nextIds = Array.from(new Set([...team.members.map((m) => m.id), ...(dir ? [dir.id] : [])]))
+      await saveSquad({
+        ...team.squad,
+        name: clean,
+        chiefId: dir?.id,
+        agentIds: nextIds
+      })
+    } else {
+      const nextIds = Array.from(new Set([...team.members.map((m) => m.id), ...(dir ? [dir.id] : [])]))
+      await saveSquad({
+        id: '',
+        name: clean,
+        mode: 'hierarchical',
+        autonomy: 'autonomous',
+        chiefId: dir?.id,
+        agentIds: nextIds
+      })
+    }
+
+    // Update all member agents' department & hierarchy
+    if (dir) {
+      patchAgent(dir.id, {
+        department: clean,
+        responsible: 'Você (Fundador)',
+        reportsTo: undefined,
+        responsibleRole: 'Diretor'
+      })
+    }
+    for (const m of team.members) {
+      if (m.id === dir?.id) continue
+      patchAgent(m.id, {
+        department: clean,
+        responsible: dir ? dir.name : 'Você (Fundador)',
+        reportsTo: dir?.id,
+        responsibleRole: clean
+      })
+    }
+
+    onSaved(L(`✨ Equipe ${clean} atualizada!`, `✨ Team ${clean} updated!`))
+  }
+
+  const handleDelete = (): void => {
+    if (team.squad) removeSquad(team.squad.id)
+    for (const m of team.members) {
+      patchAgent(m.id, { department: 'Geral', reportsTo: undefined, responsible: 'Você (Fundador)' })
+    }
+    onSaved(L(`Equipe ${team.teamName} removida.`, `Team ${team.teamName} removed.`))
+  }
+
+  return (
+    <div className="gov-modal-backdrop" onClick={onClose}>
+      <div className="gov-modal" onClick={(e) => e.stopPropagation()}>
+        <div className="gov-modal__header">
+          <div>
+            <h2 className="gov-modal__title">{L('Editar Equipe / Squad', 'Edit Team / Squad')}</h2>
+            <span className="gov-modal__subtitle">{team.teamName}</span>
+          </div>
+          <button className="icon-btn" onClick={onClose}>
+            <Icon name="x" size={16} />
+          </button>
+        </div>
+
+        <div className="gov-modal__body">
+          <div className="gov-form-group">
+            <label className="gov-label">{L('Nome da Equipe', 'Team Name')}</label>
+            <input
+              className="gov-input"
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              autoFocus
+            />
+          </div>
+
+          <div className="gov-form-group">
+            <label className="gov-label">{L('Diretor da Equipe (responde ao Fundador)', 'Team Director (reports to Founder)')}</label>
+            <select
+              className="gov-input"
+              value={directorId}
+              onChange={(e) => setDirectorId(e.target.value)}
+            >
+              <option value="">{L('Sem diretor fixo (todos respondem ao Fundador)', 'No fixed director (all report to Founder)')}</option>
+              {allAgents.map((a) => (
+                <option key={a.id} value={a.id}>
+                  {a.name} ({a.department || 'Geral'} · {a.role || 'Bot'})
+                </option>
+              ))}
+            </select>
+          </div>
+        </div>
+
+        <div className="gov-modal__footer">
+          <div className="gov-modal__footer-left">
+            <button type="button" className="btn btn--sm" onClick={handleDelete}>
+              <Icon name="trash" size={13} />
+              <span>{L('Excluir Equipe', 'Delete Team')}</span>
+            </button>
+          </div>
+          <div className="gov-modal__footer-right">
+            <button type="button" className="btn btn--sm" onClick={onClose}>{L('Cancelar', 'Cancel')}</button>
+            <button type="button" className="btn btn--sm btn--primary" onClick={() => void handleSave()}>
+              {L('Salvar Equipe', 'Save Team')}
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 function EditHierarchyModal({
   agent,
   allAgents,
@@ -626,7 +796,7 @@ function EditHierarchyModal({
   teamNames: string[]
   onClose: () => void
 }): ReactNode {
-  const [department, setDepartment] = useState(agent.department ?? teamNames[0] ?? 'Little Faith Squad')
+  const [department, setDepartment] = useState(agent.department ?? teamNames[0] ?? 'Geral')
   const [reportsToId, setReportsToId] = useState(agent.reportsTo ?? '')
   const [role, setRole] = useState(agent.role ?? '')
 
@@ -669,7 +839,7 @@ function EditHierarchyModal({
             <input
               className="gov-input"
               value={department}
-              placeholder={L('Ex.: Little Faith Squad, romei.ro…', 'E.g. Little Faith Squad, romei.ro…')}
+              placeholder={L('Ex.: Produto & SaaS, Conteúdo, Atendimento…', 'E.g. Product & SaaS, Content, Support…')}
               onChange={(e) => setDepartment(e.target.value)}
             />
             <div className="gov-quick-pills" style={{ marginTop: 6 }}>

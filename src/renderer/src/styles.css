@@ -10565,18 +10565,20 @@ body.is-resizing-panel iframe {
 
 .gov-leaders-row {
   display: flex;
-  gap: 20px;
+  flex-wrap: wrap;
+  gap: 32px;
   justify-content: center;
   align-items: flex-start;
   margin-top: 0;
-  padding: 0 20px;
+  padding: 0 24px;
 }
 
 .gov-leader-column {
   display: flex;
   flex-direction: column;
   align-items: center;
-  width: 136px;
+  width: 256px;
+  flex-shrink: 0;
   position: relative;
 }
 
