@@ -13459,11 +13459,14 @@ button:focus-visible, a:focus-visible { outline: 2px solid var(--accent); outlin
 .project-chats-bar {
   display: flex;
   align-items: center;
+  flex-wrap: wrap;
   gap: 4px;
   padding: 6px 16px 0;
   border-bottom: 1px solid var(--border);
   background: var(--bg-1, rgba(255, 255, 255, 0.02));
-  overflow-x: auto;
+  overflow: visible;
+  position: relative;
+  z-index: 20;
   flex-shrink: 0;
 }
 
