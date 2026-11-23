@@ -13453,3 +13453,137 @@ button:focus-visible, a:focus-visible { outline: 2px solid var(--accent); outlin
 /* Graphite surfaces and a single lime navigation accent. */
 .nav-item.is-active{background:var(--accent-soft);color:var(--accent);box-shadow:inset 3px 0 var(--accent)}
 .harness.is-picked{border-color:var(--accent)}
+
+
+/* ---------- Project Individual Chat Tabs (Antigravity / Orca style) ---------- */
+.project-chats-bar {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 6px 16px 0;
+  border-bottom: 1px solid var(--border);
+  background: var(--bg-1, rgba(255, 255, 255, 0.02));
+  overflow-x: auto;
+  flex-shrink: 0;
+}
+
+.project-chat-tab {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 32px;
+  padding: 0 12px;
+  border-radius: 8px 8px 0 0;
+  border: 1px solid transparent;
+  border-bottom: none;
+  background: transparent;
+  color: var(--muted);
+  font-size: 12.5px;
+  font-weight: 500;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background 0.15s, color 0.15s;
+}
+
+.project-chat-tab:hover {
+  background: rgba(255, 255, 255, 0.04);
+  color: var(--text);
+}
+
+.project-chat-tab.is-active {
+  background: var(--bg);
+  color: var(--text);
+  border-color: var(--border);
+  box-shadow: inset 0 -2px 0 var(--accent);
+}
+
+.project-chat-tab__btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: none;
+  border: none;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+  padding: 0;
+}
+
+.project-chat-tab__close {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  border-radius: 4px;
+  border: none;
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+  opacity: 0.6;
+}
+
+.project-chat-tab__close:hover {
+  opacity: 1;
+  background: rgba(255, 255, 255, 0.1);
+  color: var(--text);
+}
+
+.project-chat-tab__badge {
+  background: var(--accent);
+  color: #0b0f0a;
+  font-size: 10px;
+  font-weight: 700;
+  padding: 1px 5px;
+  border-radius: 999px;
+}
+
+.project-chat-tab--add {
+  color: var(--muted);
+  border-radius: 6px;
+  height: 26px;
+  padding: 0 8px;
+  margin-bottom: 4px;
+}
+
+.project-chat-new {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+}
+
+.project-chat-menu {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  z-index: 60;
+  min-width: 220px;
+  padding: 6px;
+  margin-top: 4px;
+  border-radius: 10px;
+  border: 1px solid var(--border);
+  background: var(--bg-2, #181a1b);
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.45);
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.project-chat-menu__item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 7px 10px;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text);
+  font-size: 12.5px;
+  text-align: left;
+  cursor: pointer;
+}
+
+.project-chat-menu__item:hover {
+  background: rgba(255, 255, 255, 0.06);
+}

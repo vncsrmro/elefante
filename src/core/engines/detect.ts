@@ -217,7 +217,16 @@ export async function detectGemini(): Promise<{ status: EngineStatus; models: st
 }
 
 export async function detectAntigravity(): Promise<{ status: EngineStatus; models: string[] }> {
-  const path = await which('agy')
+  let path = await which('agy')
+  if (!path && process.platform === 'win32') {
+    const local = process.env['LOCALAPPDATA'] ?? ''
+    const candidates = [
+      join(local, 'Programs', 'Antigravity', 'bin', 'agy.cmd'),
+      join(local, 'Programs', 'Antigravity', 'resources', 'app', 'bin', 'agy.cmd'),
+      join(local, 'Programs', 'Antigravity', 'Antigravity.exe')
+    ]
+    path = candidates.find((p) => existsSync(p))
+  }
   if (!path) return { status: { installed: false, loggedIn: false }, models: [] }
   const [v, list] = await Promise.all([run(path, ['--version']), run(path, ['models'], 15_000)])
   const parsed = list.stdout

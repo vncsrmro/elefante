@@ -218,11 +218,35 @@ export function Sidebar(): ReactNode {
       <nav className="sidebar__scroll">
         {/* Primary Focus: Project Folders */}
         <div className="orca-projects-list">
-          {channels.map((c) => (
-            <div key={c.id} onContextMenu={(e) => open(e, channelMenu(c))}>
-              <ProjectItem conv={c} />
-            </div>
-          ))}
+          {channels.map((c) => {
+            const subs = s.conversations.filter((sc) => sc.parentId === c.id)
+            return (
+              <div key={c.id} onContextMenu={(e) => open(e, channelMenu(c))}>
+                <ProjectItem conv={c} />
+                {subs.length > 0 && (
+                  <div style={{ paddingLeft: 18, display: 'flex', flexDirection: 'column', gap: 2, marginTop: 2, marginBottom: 4 }}>
+                    {subs.map((sc) => {
+                      const ag = agentById(s, sc.name)
+                      const active = s.view?.kind === 'conversation' && s.view.id === sc.id
+                      return (
+                        <button
+                          key={sc.id}
+                          type="button"
+                          className={`nav-item ${active ? 'is-active' : ''}`}
+                          style={{ height: 28, fontSize: 12, paddingLeft: 8 }}
+                          onClick={() => navigate({ kind: 'conversation', id: sc.id })}
+                        >
+                          {ag && <AgentAvatar agent={ag} size={15} />}
+                          <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{ag?.name ?? sc.name}</span>
+                          {(sc.unread ?? 0) > 0 && <span className="badge">{sc.unread}</span>}
+                        </button>
+                      )
+                    })}
+                  </div>
+                )}
+              </div>
+            )
+          })}
         </div>
 
         {dms.length > 0 && (
