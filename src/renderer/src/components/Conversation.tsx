@@ -303,7 +303,7 @@ export function ConversationView({ id }: { id: string }): ReactNode {
               {(projectRoot.unread ?? 0) > 0 && <span className="project-chat-tab__badge">{projectRoot.unread}</span>}
             </button>
             {subChats.map((sc) => {
-              const scAgent = allTeamAgents.find((a) => sc.members.includes(a.id))
+              const scAgent = sc.kind === 'dm' ? allTeamAgents.find((a) => sc.members.includes(a.id)) : undefined
               return (
                 <div key={sc.id} className={`project-chat-tab ${conv.id === sc.id ? 'is-active' : ''}`}>
                   <button
@@ -311,14 +311,14 @@ export function ConversationView({ id }: { id: string }): ReactNode {
                     className="project-chat-tab__btn"
                     onClick={() => navigate({ kind: 'conversation', id: sc.id })}
                   >
-                    {scAgent && <AgentAvatar agent={scAgent} size={14} />}
-                    <span>{scAgent?.name ?? sc.name}</span>
+                    {scAgent ? <AgentAvatar agent={scAgent} size={14} /> : <Icon name="hash" size={11} />}
+                    <span>{scAgent ? scAgent.name : sc.name}</span>
                     {(sc.unread ?? 0) > 0 && <span className="project-chat-tab__badge">{sc.unread}</span>}
                   </button>
                   <button
                     type="button"
                     className="project-chat-tab__close"
-                    title={L('Fechar chat', 'Close chat')}
+                    title={L('Fechar aba', 'Close tab')}
                     onClick={(e) => {
                       e.stopPropagation()
                       void deleteConversation(sc.id)
@@ -333,11 +333,20 @@ export function ConversationView({ id }: { id: string }): ReactNode {
               <button
                 type="button"
                 className="project-chat-tab project-chat-tab--add"
-                onClick={() => setNewChatMenuOpen((v) => !v)}
-                title={L('Abrir chat individual com um agente neste projeto', 'Open individual chat with an agent in this project')}
+                onClick={() => void openProjectChat(projectRoot.id)}
+                title={L('Abrir nova aba neste projeto', 'Open new tab in this project')}
               >
                 <Icon name="plus" size={12} />
-                <span>{L('Chat individual', 'Individual chat')}</span>
+                <span>{L('Nova aba', 'New tab')}</span>
+              </button>
+              <button
+                type="button"
+                className="project-chat-tab project-chat-tab--add"
+                style={{ padding: '0 6px' }}
+                onClick={() => setNewChatMenuOpen((v) => !v)}
+                title={L('Abrir aba direta com um agente específico', 'Open direct tab with a specific agent')}
+              >
+                <Icon name="chevron" size={10} />
               </button>
               {newChatMenuOpen && (
                 <div className="project-chat-menu" onMouseLeave={() => setNewChatMenuOpen(false)}>

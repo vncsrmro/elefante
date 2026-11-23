@@ -515,8 +515,8 @@ export async function openDm(agentId: string): Promise<void> {
   navigate({ kind: 'conversation', id })
 }
 
-export async function openProjectChat(parentId: string, agentId: string, fresh = false): Promise<void> {
-  const id = await call('openProjectChat', { parentId, agentId, fresh })
+export async function openProjectChat(parentId: string, agentId?: string, fresh = false, title?: string): Promise<void> {
+  const id = await call('openProjectChat', { parentId, agentId, fresh, title })
   navigate({ kind: 'conversation', id })
 }
 

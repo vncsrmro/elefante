@@ -825,15 +825,29 @@ const api: Api = {
     emitConversations([id])
     return id
   },
-  openProjectChat: ({ parentId, agentId, fresh }) => {
+  openProjectChat: ({ parentId, agentId, fresh, title }) => {
     const parent = db.conversation(parentId)
     if (!parent) throw new Error('Project conversation not found')
-    if (!fresh) {
-      const existing = db.conversations().find((c) => c.parentId === parentId && c.members.includes(agentId))
-      if (existing) return existing.id
+    if (agentId) {
+      if (!fresh) {
+        const existing = db.conversations().find((c) => c.parentId === parentId && c.members.includes(agentId))
+        if (existing) return existing.id
+      }
+      const id = randomUUID()
+      db.createConversation({ id, kind: 'dm', name: agentId, project: parent.project, parentId, members: [agentId] })
+      emitConversations([id])
+      return id
     }
+    const count = db.conversations().filter((c) => c.parentId === parentId).length + 2
     const id = randomUUID()
-    db.createConversation({ id, kind: 'dm', name: agentId, project: parent.project, parentId, members: [agentId] })
+    db.createConversation({
+      id,
+      kind: 'channel',
+      name: title?.trim() || `${L('Aba', 'Tab')} ${count}`,
+      project: parent.project,
+      parentId,
+      members: parent.members
+    })
     emitConversations([id])
     return id
   },

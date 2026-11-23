@@ -40,7 +40,7 @@ export interface Api {
   setChannelMembers(p: { id: string; agentIds: string[] }): void
   deleteConversation(p: { id: string }): void // a channel or a DM, with its messages and routines
   openDm(p: { agentId: string }): string
-  openProjectChat(p: { parentId: string; agentId: string; fresh?: boolean }): string
+  openProjectChat(p: { parentId: string; agentId?: string; fresh?: boolean; title?: string }): string
   startStage(p: { topic: string; agentIds: string[]; rounds: number; project?: string }): string
   saveSquad(p: { squad: Omit<Squad, 'createdAt'> & { createdAt?: number } }): Squad
   removeSquad(p: { id: string }): void
