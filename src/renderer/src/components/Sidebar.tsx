@@ -283,13 +283,43 @@ export function Sidebar(): ReactNode {
             </div>
           </div>
           {showAgents &&
-            s.agents
-              .filter(isTeam)
-              .map((a) => (
-                <div key={a.id} onContextMenu={(e) => open(e, agentMenu(a.id, a.name))}>
-                  <AgentItem id={a.id} />
+            (() => {
+              const activeAgents = s.agents.filter(isTeam)
+              const groups = new Map<string, typeof activeAgents>()
+              for (const sq of s.squads) {
+                if (sq.name.trim() && !groups.has(sq.name.trim())) groups.set(sq.name.trim(), [])
+              }
+              for (const a of activeAgents) {
+                const gName = a.department?.trim() || L('Geral', 'General')
+                if (!groups.has(gName)) groups.set(gName, [])
+                groups.get(gName)!.push(a)
+              }
+              return Array.from(groups.entries()).map(([gName, list]) => (
+                <div key={gName} style={{ marginBottom: 6 }}>
+                  <div
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'space-between',
+                      padding: '4px 10px 2px',
+                      fontSize: 10.5,
+                      fontWeight: 600,
+                      letterSpacing: '0.04em',
+                      textTransform: 'uppercase',
+                      color: 'var(--muted)'
+                    }}
+                  >
+                    <span>{gName}</span>
+                    <span>{list.length}</span>
+                  </div>
+                  {list.map((a) => (
+                    <div key={a.id} onContextMenu={(e) => open(e, agentMenu(a.id, a.name))}>
+                      <AgentItem id={a.id} />
+                    </div>
+                  ))}
                 </div>
-              ))}
+              ))
+            })()}
           {showAgents && s.agents.some((a) => a.archived) && (
             <button className="nav-item nav-item--quiet" onClick={() => openDialog({ kind: 'archived' })}>
               <Icon name="layers" size={14} />
