@@ -24,9 +24,9 @@ import { allowed, approvalHash, canonical } from './policy'
 const MAX_CONCURRENT = 4
 const MAX_TURN_IMAGES = 6 // attached images a reply sees as images; older ones only by name
 const mimeOf = (name: string): string => ({ png: 'image/png', gif: 'image/gif', webp: 'image/webp' })[name.split('.').pop()!.toLowerCase()] ?? 'image/jpeg'
-const MAX_MENTIONS = 3
+const MAX_MENTIONS = 8
 const MAX_DEPTH = 3 // agent replies chained from one human message without tool work
-const MAX_WORK_DEPTH = 50 // agent replies chained when doing active tool work
+const MAX_WORK_DEPTH = 250 // agent replies chained when doing active tool/project work
 const DELTA_FLUSH_MS = 40
 const RETRYABLE: RunStatus[] = ['failed', 'stopped', 'interrupted', 'limit_reached']
 const MAX_RESULT_CHARS = 300_000 // per tool result handed back to the model (allows complete outputs without truncating code/logs)
@@ -1670,7 +1670,12 @@ export class Runner {
     if (this.paused) return false
     const next = mentioned(msg.text, this.members(conv).filter((a) => a.id !== agent.id)).slice(0, MAX_MENTIONS)
     if (next.length === 0) return false
-    const hasWork = (msg.run?.steps?.some((s) => s.status === 'done' && !NON_TOOL_LABELS.has(s.label)) ?? false) || (msg.run?.artifactIds?.length ?? 0) > 0 || !!msg.run?.browser
+    const hasWork =
+      !!conv.project ||
+      (msg.run?.todos?.length ?? 0) > 0 ||
+      (msg.run?.steps?.some((s) => s.status === 'done' && !NON_TOOL_LABELS.has(s.label)) ?? false) ||
+      (msg.run?.artifactIds?.length ?? 0) > 0 ||
+      !!msg.run?.browser
     const max = hasWork ? MAX_WORK_DEPTH : MAX_DEPTH
     if (depth >= max) {
       this.post(conv.id, L(`Parei a conversa entre agentes aqui: foram ${depth} respostas seguidas sem intervenção. Mande uma mensagem pra continuar se desejar.`, `I stopped the conversation between agents here: ${depth} replies in a row without intervention. Send a message to go on if desired.`))
