@@ -72,6 +72,28 @@ export class Gateway {
       return
     }
 
+    const callMatch = /^\/mcp\/([a-f0-9]{48})\/call$/.exec(url.pathname)
+    if (callMatch && req.method === 'POST') {
+      const session = this.sessions.get(callMatch[1]!)
+      if (!session) {
+        res.writeHead(404).end()
+        return
+      }
+      let raw = ''
+      for await (const chunk of req) raw += String(chunk)
+      const parsed = JSON.parse(raw || '{}') as { name?: string; arguments?: Record<string, unknown> }
+      const name = String(parsed.name ?? '')
+      if (!session.tools.some((t) => t.name === name)) {
+        res.writeHead(403, { 'content-type': 'application/json; charset=utf-8' })
+        res.end(JSON.stringify(textResult(L(`Ferramenta não permitida: ${name}`, `Tool not allowed: ${name}`), true)))
+        return
+      }
+      const out = await session.call(name, parsed.arguments ?? {})
+      res.writeHead(200, { 'content-type': 'application/json; charset=utf-8' })
+      res.end(JSON.stringify(out))
+      return
+    }
+
     const token = /^\/mcp\/([a-f0-9]{48})$/.exec(req.url ?? '')?.[1]
     const session = token ? this.sessions.get(token) : undefined
     if (!session) {

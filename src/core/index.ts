@@ -154,7 +154,7 @@ const engineImpls: Record<EngineId, Engine> = fake
       opencode: opencodeEngine(() => engines.opencode.path, join(dataDir, 'opencode-home'), loginEnv, () => engines.opencode.version),
       pi: piEngine(() => engines.pi.path, join(dataDir, 'pi'), loginEnv),
       gemini: geminiEngine(() => engines.gemini.path, geminiAppDir(dataDir), loginEnv),
-      antigravity: antigravityEngine(() => engines.antigravity.path, loginEnv, join(dataDir, 'antigravity-home'))
+      antigravity: antigravityEngine(() => engines.antigravity.path, loginEnv)
     }
 
 // A command in the login shell, where SSO tools live; what it prints, trimmed.

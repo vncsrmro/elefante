@@ -94,7 +94,19 @@ export function antigravityParser(): Parser {
 }
 
 export function antigravityInput(turn: Turn): string {
-  return turn.system ? `${turn.system}\n\n---\n\n${turn.prompt}` : turn.prompt
+  const bridge = turn.mcpUrl
+    ? [
+        '## Ponte Direta de Ferramentas do Elefante (Navegador, Tarefas, Apps)',
+        `Se as ferramentas do Elefante (como \`navegador_abrir\`, \`navegador_clicar\`, \`navegador_digitar\`, \`navegador_ler\`, \`navegador_ver\`, \`navegador_esperar\`, \`navegador_enviar_arquivo\`, \`gerenciar_tarefas\`, \`ask_user\`) não aparecerem diretamente na sua lista de tools MCP desta sessão do Antigravity, elas ESTÃO 100% ATIVAS E LIBERADAS através do Gateway HTTP local deste turno em: \`${turn.mcpUrl}/call\`.`,
+        'Para chamar qualquer ferramenta do Elefante (inclusive abrir e controlar o navegador Brave/Chrome do Elefante na tela do usuário), basta executar via `run_command` com `node -e`:',
+        '```',
+        `node -e "fetch('${turn.mcpUrl}/call',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({name:'navegador_abrir',arguments:{url:'https://flow.google.com',navegador:'brave',abrir_janela:true}})}).then(r=>r.json()).then(d=>console.log(d.content?.map(c=>c.text).join('\\n')||JSON.stringify(d)))"`,
+        '```',
+        'NUNCA diga que as ferramentas `navegador_*` estão ausentes ou bloqueadas: use sempre essa ponte HTTP local em `' + `${turn.mcpUrl}/call` + '` para executar `navegador_abrir`, `navegador_ler`, `navegador_clicar`, `navegador_digitar`, `navegador_esperar`, etc. normalmente!'
+      ].join('\n')
+    : ''
+  const sys = [turn.system, bridge].filter(Boolean).join('\n\n')
+  return sys ? `${sys}\n\n---\n\n${turn.prompt}` : turn.prompt
 }
 
 export function antigravityArgs(turn: Turn): string[] {
@@ -149,18 +161,15 @@ export function antigravityModels(): string[] {
 
 export const antigravityAppDir = (dataDir: string): string => join(dataDir, 'antigravity-home')
 
-function registerIsolatedMcpGateway(baseDir: string, mcpUrl?: string): () => void {
+function registerMcpGateway(mcpUrl?: string): () => void {
   if (!mcpUrl) return () => {}
-  const cfgDir = join(baseDir, '.gemini', 'config')
-  const cliDir = join(baseDir, '.gemini', 'antigravity-cli')
+  const cfgDir = join(homedir(), '.gemini', 'config')
   const configPath = join(cfgDir, 'mcp_config.json')
-  const cliSettingsPath = join(cliDir, 'settings.json')
   try {
     mkdirSync(cfgDir, { recursive: true })
-    mkdirSync(cliDir, { recursive: true })
-    let cfg: { mcpServers?: Record<string, unknown> } = {}
+    let cfg: { mcpServers?: Record<string, { disabled?: boolean; serverUrl?: string }> } = {}
     if (existsSync(configPath)) {
-      cfg = JSON.parse(readFileSync(configPath, 'utf8')) as { mcpServers?: Record<string, unknown> }
+      cfg = JSON.parse(readFileSync(configPath, 'utf8')) as { mcpServers?: Record<string, { disabled?: boolean; serverUrl?: string }> }
     }
     cfg.mcpServers = cfg.mcpServers ?? {}
     cfg.mcpServers['elefante'] = {
@@ -168,12 +177,11 @@ function registerIsolatedMcpGateway(baseDir: string, mcpUrl?: string): () => voi
       serverUrl: mcpUrl
     }
     writeFileSync(configPath, JSON.stringify(cfg, null, 2), 'utf8')
-    writeFileSync(cliSettingsPath, JSON.stringify({ mcpServers: cfg.mcpServers }, null, 2), 'utf8')
     return () => {
       try {
         if (existsSync(configPath)) {
-          const c = JSON.parse(readFileSync(configPath, 'utf8')) as { mcpServers?: Record<string, unknown> }
-          if (c.mcpServers?.['elefante']) {
+          const c = JSON.parse(readFileSync(configPath, 'utf8')) as { mcpServers?: Record<string, { disabled?: boolean; serverUrl?: string }> }
+          if (c.mcpServers?.['elefante']?.serverUrl === mcpUrl) {
             delete c.mcpServers['elefante']
             writeFileSync(configPath, JSON.stringify(c, null, 2), 'utf8')
           }
@@ -181,15 +189,14 @@ function registerIsolatedMcpGateway(baseDir: string, mcpUrl?: string): () => voi
       } catch {}
     }
   } catch (e) {
-    console.error('[antigravity] failed to register isolated gateway MCP', e)
+    console.error('[antigravity] failed to register gateway MCP in mcp_config.json', e)
     return () => {}
   }
 }
 
 export function antigravityEngine(
   bin: () => string | undefined,
-  shellEnv: () => Promise<NodeJS.ProcessEnv> = async () => ({}),
-  appDir: string = join(homedir(), '.elefante-agy')
+  shellEnv: () => Promise<NodeJS.ProcessEnv> = async () => ({})
 ): Engine {
   return {
     id: 'antigravity',
@@ -199,11 +206,10 @@ export function antigravityEngine(
         yield { type: 'error', message: L('O Antigravity CLI (agy) não está instalado. Veja em Configurações.', "Antigravity CLI (agy) isn't installed. See Settings.") }
         return
       }
-      const cleanupMcp = registerIsolatedMcpGateway(appDir, turn.mcpUrl)
+      const cleanupMcp = registerMcpGateway(turn.mcpUrl)
       const env: NodeJS.ProcessEnv = {
         ...process.env,
-        ...(await shellEnv()),
-        AGY_CONFIG_DIR: join(appDir, '.gemini', 'antigravity-cli')
+        ...(await shellEnv())
       }
       try {
         yield* runCli({
