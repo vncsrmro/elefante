@@ -1670,18 +1670,23 @@ export class Runner {
     if (this.paused) return false
     const next = mentioned(msg.text, this.members(conv).filter((a) => a.id !== agent.id)).slice(0, MAX_MENTIONS)
     if (next.length === 0) return false
-    const hasWork =
-      !!conv.project ||
-      (msg.run?.todos?.length ?? 0) > 0 ||
+    // Only treat as a dead ping-pong loop when the agent repeats the exact same short text it sent on its previous turn in this conversation without doing any tool work.
+    const recentSameAgent = this.deps.db
+      .recentMessages(conv.id, 10)
+      .filter((m) => m.id !== msg.id && m.author.kind === 'agent' && m.author.id === agent.id)
+    const prevSameText = recentSameAgent.at(-1)?.text.trim() === msg.text.trim() && msg.text.trim().length < 80
+    const didTools =
       (msg.run?.steps?.some((s) => s.status === 'done' && !NON_TOOL_LABELS.has(s.label)) ?? false) ||
       (msg.run?.artifactIds?.length ?? 0) > 0 ||
-      !!msg.run?.browser
-    const max = hasWork ? MAX_WORK_DEPTH : MAX_DEPTH
+      !!msg.run?.browser ||
+      (msg.run?.todos?.length ?? 0) > 0
+    const isPingPongLoop = prevSameText && !didTools
+    const max = isPingPongLoop ? MAX_DEPTH : MAX_WORK_DEPTH
     if (depth >= max) {
       this.post(conv.id, L(`Parei a conversa entre agentes aqui: foram ${depth} respostas seguidas sem intervenção. Mande uma mensagem pra continuar se desejar.`, `I stopped the conversation between agents here: ${depth} replies in a row without intervention. Send a message to go on if desired.`))
       return false
     }
-    const nextDepth = hasWork ? 1 : depth + 1
+    const nextDepth = isPingPongLoop ? depth + 1 : (didTools ? 1 : Math.min(depth + 1, MAX_WORK_DEPTH - 1))
     for (const a of next) this.enqueue(() => this.execute(a, conv, { depth: nextDepth, work: msg.run?.work }))
     return true
   }
