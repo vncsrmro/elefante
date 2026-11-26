@@ -866,6 +866,21 @@ const api: Api = {
     void runner.runStage(id, clean, agentIds, Math.max(1, Math.min(6, rounds || 2)))
     return id
   },
+  startSwarm: ({ goal, agentIds, project }) => {
+    const id = randomUUID()
+    const clean = goal.trim() || L('Missão Swarm', 'Swarm Mission')
+    db.createConversation({
+      id,
+      kind: 'channel',
+      name: `Swarm: ${clean.slice(0, 40)}`,
+      topic: '__swarm__',
+      project,
+      members: agentIds
+    })
+    emitConversations([id])
+    void runner.runSwarm(id, clean, agentIds)
+    return id
+  },
   saveSquad: ({ squad }) => {
     const full = {
       ...squad,

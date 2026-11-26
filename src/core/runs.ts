@@ -21,7 +21,7 @@ import { JEV_MODEL, routeJev } from './jev'
 import { route } from './router'
 import { allowed, approvalHash, canonical } from './policy'
 
-const MAX_CONCURRENT = 4
+const MAX_CONCURRENT = 6
 const MAX_TURN_IMAGES = 6 // attached images a reply sees as images; older ones only by name
 const mimeOf = (name: string): string => ({ png: 'image/png', gif: 'image/gif', webp: 'image/webp' })[name.split('.').pop()!.toLowerCase()] ?? 'image/jpeg'
 const MAX_MENTIONS = 8
@@ -192,6 +192,34 @@ export class Runner {
     emit({ type: 'message', message: mine })
 
     const members = this.members(conv)
+
+    // Intercept `/swarm <goal>` command in any channel or project chat
+    if (/^\/swarm\b/i.test(body)) {
+      const goal = body.replace(/^\/swarm\b/i, '').trim()
+      if (!goal) {
+        this.post(conv.id, L('Use `/swarm <objetivo>` para disparar uma missão paralela com o time. Ex.: `/swarm criar landing page e revisar QA`.', 'Use `/swarm <goal>` to launch a parallel team mission.'))
+        return
+      }
+      const swarmIds = members.length > 0 ? members.map((a) => a.id) : db.agents().filter((a) => !a.archived && a.kind !== 'tuca').map((a) => a.id)
+      if (swarmIds.length === 0) {
+        this.post(conv.id, L('Nenhum agente disponível para iniciar o Swarm.', 'No agents available to start the Swarm.'))
+        return
+      }
+      const swarmId = randomUUID()
+      db.createConversation({
+        id: swarmId,
+        kind: 'channel',
+        name: `Swarm: ${goal.slice(0, 40)}`,
+        topic: '__swarm__',
+        project: conv.project,
+        members: swarmIds
+      })
+      emit({ type: 'conversation', conversation: db.conversation(swarmId)! })
+      this.post(conv.id, L(`🐝 **Swarm iniciado!** Acompanhe em tempo real na aba **Palco → Swarm**: "${goal}"`, `🐝 **Swarm started!** Track live in **Stage → Swarm**: "${goal}"`))
+      void this.runSwarm(swarmId, goal, swarmIds)
+      return
+    }
+
     let responders = mentioned(body, members).slice(0, MAX_MENTIONS)
 
     const asked = this.pendingQuestion(conv.id)
@@ -386,6 +414,119 @@ export class Runner {
         })
       }
     }
+  }
+
+  // Runs a true parallel Swarm mission:
+  // 1) Coordinator decomposes the goal into non-overlapping parallel worker tasks.
+  // 2) Independent workers run simultaneously in parallel with full tool autonomy.
+  // 3) Verifier / Coordinator runs a final verification & synthesis wave.
+  async runSwarm(conversationId: string, goal: string, agentIds: string[]): Promise<void> {
+    const { db, emit } = this.deps
+    const conv = db.conversation(conversationId)
+    if (!conv) return
+
+    const ask: Message = {
+      id: randomUUID(),
+      conversationId,
+      author: { kind: 'me' },
+      text: `[SWARM GOAL] ${goal.trim()}`,
+      at: Date.now()
+    }
+    db.saveMessage(ask)
+    emit({ type: 'message', message: ask })
+
+    const team = agentIds.map((id) => db.agent(id)).filter((a): a is Agent => !!a && !a.archived)
+    if (team.length === 0) return
+
+    const coordinator = team.find((a) => !a.reportsTo) ?? team[0]!
+    const workers = team.filter((a) => a.id !== coordinator.id)
+    const verifier = workers.find((a) => /iris|revis|qa|verif/i.test(`${a.handle} ${a.name} ${a.role}`))
+    const builders = workers.filter((a) => a.id !== verifier?.id)
+
+    // Wave 1: Coordinator splits goal into parallel briefs
+    const roster = workers.map((w) => `- @${w.handle} (${w.name}): ${w.role}`).join('\n')
+    const coordTask = L(
+      `[SWARM · COORDENADOR] Objetivo da missão: "${goal}".\n` +
+        `Você é o Coordenador deste Swarm paralelo. Divida o objetivo em tarefas paralelas claras, com posse exclusiva de arquivos/escopo (para ninguém sobrescrever o outro).\n` +
+        `Time disponível:\n${roster || '- (você executa diretamente)'}\n\n` +
+        `Poste no quadro (Board) o plano objetivo mencionando cada agente (@handle) com o que ele é dono e o que significa estar pronto ([done]). ` +
+        `Se quiser estruturar em JSON, inclua um bloco \`\`\`swarm-plan\n[{"handle":"...","brief":"..."}]\n\`\`\` no final. Seja cirúrgico e direto.`,
+      `[SWARM · COORDINATOR] Mission goal: "${goal}".\n` +
+        `You are the Coordinator of this parallel Swarm. Split the goal into clear parallel tasks with explicit file/scope ownership.\n` +
+        `Available team:\n${roster || '- (execute directly)'}\n\n` +
+        `Post the plan on the Board mentioning each @handle with what they own and what [done] looks like.`
+    )
+
+    await new Promise<void>((resolve) => {
+      this.enqueue(() => this.execute(coordinator, conv, { depth: 1, task: coordTask }).then(() => resolve(), () => resolve()))
+    })
+
+    if (workers.length === 0) return
+
+    // Parse optional swarm-plan JSON from coordinator's latest message
+    const recent = db.recentMessages(conversationId, 10)
+    const coordMsg = [...recent].reverse().find((m) => m.author.kind === 'agent' && m.author.id === coordinator.id)
+    const briefByHandle = new Map<string, string>()
+    if (coordMsg?.text) {
+      const match = coordMsg.text.match(/```swarm-plan\s*([\s\S]*?)```/i)
+      if (match) {
+        try {
+          const parsed = JSON.parse(match[1]!) as { handle?: string; brief?: string }[]
+          if (Array.isArray(parsed)) {
+            for (const item of parsed) {
+              if (item.handle && item.brief) briefByHandle.set(item.handle.replace(/^@/, '').toLowerCase(), item.brief)
+            }
+          }
+        } catch {
+          // ignore malformed JSON, fall back to coordinator's full board post
+        }
+      }
+    }
+
+    // Wave 2: Execute all builder workers IN PARALLEL
+    const parallelWorkers = builders.length > 0 ? builders : workers
+    await Promise.all(
+      parallelWorkers.map((worker) => {
+        const customBrief = briefByHandle.get(worker.handle.toLowerCase())
+        const workerTask = L(
+          `[SWARM · WORKER PARALELO] Objetivo global: "${goal}".\n` +
+            `Sua missão específica: ${customBrief ?? `Execute sua parte conforme o plano do coordenador @${coordinator.handle} acima no Board, respeitando seu papel (${worker.role}).`}\n` +
+            `REGRAS DO SWARM:\n` +
+            `1. Execute de forma 100% autônoma usando suas ferramentas (leia arquivos reais, edite/crie código ou entregas concretas, teste).\n` +
+            `2. Não edite arquivos fora do seu escopo.\n` +
+            `3. Ao concluir, comece sua resposta com **[done]** (ou **[blocked]** se houver bloqueio real) e liste objetivamente o que foi entregue.`,
+          `[SWARM · PARALLEL WORKER] Global goal: "${goal}".\n` +
+            `Your assignment: ${customBrief ?? `Execute your slice from @${coordinator.handle}'s plan above on the Board according to your role (${worker.role}).`}\n` +
+            `Execute autonomously with tools and start your final board update with **[done]** (or **[blocked]**).`
+        )
+        return new Promise<void>((resolve) => {
+          this.enqueue(() => this.execute(worker, conv, { depth: 1, task: workerTask }).then(() => resolve(), () => resolve()))
+        })
+      })
+    )
+
+    // Wave 3: Automatic Verifier (if present and not already run) + Coordinator synthesis
+    if (verifier && builders.length > 0) {
+      const verifyTask = L(
+        `[SWARM · VERIFICADOR] Todos os workers paralelos finalizaram para o objetivo: "${goal}".\n` +
+          `Audite o que foi entregue acima no Board e nos arquivos reais do projeto. Rode validações/testes se aplicável e poste seu veredito começando com **[done]** (APROVADO / APROVADO COM AJUSTES / REPROVADO).`,
+        `[SWARM · VERIFIER] All parallel workers finished for goal: "${goal}".\n` +
+          `Audit the deliverables on the Board and real project files. Post your verdict starting with **[done]**.`
+      )
+      await new Promise<void>((resolve) => {
+        this.enqueue(() => this.execute(verifier, conv, { depth: 1, task: verifyTask }).then(() => resolve(), () => resolve()))
+      })
+    }
+
+    const finalTask = L(
+      `[SWARM · CONSOLIDAÇÃO FINAL] Todos os agentes terminaram o Swarm para: "${goal}".\n` +
+        `Entregue ao Fundador o resumo executivo final começando com **[done]**: o que foi concluído, arquivos/entregas geradas e próximos passos (se houver).`,
+      `[SWARM · FINAL SYNTHESIS] All agents completed the Swarm for: "${goal}".\n` +
+        `Deliver the final executive summary starting with **[done]**.`
+    )
+    await new Promise<void>((resolve) => {
+      this.enqueue(() => this.execute(coordinator, conv, { depth: 1, task: finalTask }).then(() => resolve(), () => resolve()))
+    })
   }
 
   // Resolves when nothing is routing, running or queued (tests and shutdown).

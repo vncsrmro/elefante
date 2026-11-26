@@ -16,6 +16,7 @@ import {
   type SquadMode
 } from '../store'
 import { AgentAvatar, Icon, time } from './ui'
+import { SwarmView } from './SwarmView'
 import Markdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 
@@ -26,7 +27,7 @@ export function StagePage(): ReactNode {
   const stages = useStore((s) => s.conversations.filter((c) => c.topic === '__stage__'))
   const projects = useStore((s) => s.conversations.filter((c) => c.kind === 'channel' && !!c.project && c.topic !== '__stage__'))
 
-  const [tab, setTab] = useState<'office' | 'debate'>('office')
+  const [tab, setTab] = useState<'swarm' | 'office' | 'debate'>('swarm')
   const [selectedSquadId, setSelectedSquadId] = useState<string>('all')
   const [creatingSquad, setCreatingSquad] = useState(false)
   const [sqName, setSqName] = useState('')
@@ -147,6 +148,10 @@ export function StagePage(): ReactNode {
           </p>
         </div>
         <div className="topbar__view-toggle">
+          <button type="button" className={`view-toggle-btn ${tab === 'swarm' ? 'is-active' : ''}`} onClick={() => setTab('swarm')}>
+            <Icon name="spark" size={13} />
+            <span>{L('Swarm', 'Swarm')}</span>
+          </button>
           <button type="button" className={`view-toggle-btn ${tab === 'office' ? 'is-active' : ''}`} onClick={() => setTab('office')}>
             <Icon name="users" size={13} />
             <span>{L('Escritório Vivo', 'Live Office')}</span>
@@ -158,7 +163,9 @@ export function StagePage(): ReactNode {
         </div>
       </header>
 
-      {tab === 'office' ? (
+      {tab === 'swarm' ? (
+        <SwarmView />
+      ) : tab === 'office' ? (
         <div className="office-layout" style={{ display: 'grid', gridTemplateColumns: '1fr 320px', gap: 16, marginTop: 12 }}>
           <div>
             {/* Squad bar + Autonomy brake */}

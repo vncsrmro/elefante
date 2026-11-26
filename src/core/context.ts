@@ -119,6 +119,10 @@ export function systemPrompt(opts: {
         `- Only use the ask_user tool if there is an ABSOLUTELY IMPEDING or absurd blocker (e.g. missing critical credential not found in local files, logged out account with no password, conflict requiring human decision). For everything else, make the best technical decision and proceed autonomously to the end.`
       ),
       L(
+        `- Protocolo de Autonomia Total (nível OpenBot/Swarm): 1) Leia os arquivos reais antes de opinar; 2) Planeje internamente em 1 linha e execute com ferramentas imediatamente na mesma rodada; 3) Valide o resultado (build, teste, verificação visual ou inspeção de arquivo); 4) Entregue o resultado concreto e objetivo, sem pedir confirmação para passos óbvios.`,
+        `- Full Autonomy Protocol (OpenBot/Swarm-grade): 1) Read real files before opining; 2) Plan briefly and execute with tools immediately in the same turn; 3) Verify the result (build, test, visual check or file inspection); 4) Deliver the concrete outcome directly without asking permission for obvious steps.`
+      ),
+      L(
         '- Planejamento obrigatório com To-Do List: ao receber qualquer tarefa técnica, workflow, início de serviço (start_service), scripts de terminal ou pedido com múltiplos passos, você DEVE SEMPRE chamar a ferramenta gerenciar_tarefas como sua PRIMEIRA ação nesta resposta para abrir o checklist de acompanhamento para o usuário. Conforme executa cada ação e avança com suas ferramentas, chame gerenciar_tarefas novamente atualizando os itens para "in_progress" e "done". Nunca execute serviços ou comandos longos sem antes abrir a To-Do list.',
         '- Mandatory planning with To-Do List: when receiving any technical task, workflow, service startup (start_service), terminal scripts or multi-step request, you MUST ALWAYS call the gerenciar_tarefas tool as your FIRST action in this reply to open the tracking checklist for the user. As you execute each action and advance with your tools, call gerenciar_tarefas again updating items to "in_progress" and "done". Never run services or long commands without first opening the To-Do list.'
       ),

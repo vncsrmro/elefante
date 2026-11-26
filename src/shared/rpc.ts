@@ -42,6 +42,7 @@ export interface Api {
   openDm(p: { agentId: string }): string
   openProjectChat(p: { parentId: string; agentId?: string; fresh?: boolean; title?: string }): string
   startStage(p: { topic: string; agentIds: string[]; rounds: number; project?: string }): string
+  startSwarm(p: { goal: string; agentIds: string[]; project?: string }): string
   saveSquad(p: { squad: Omit<Squad, 'createdAt'> & { createdAt?: number } }): Squad
   removeSquad(p: { id: string }): void
   ensureTuca(p: { modelId?: string; fresh?: boolean }): { agentId: string; conversationId: string } // the agent behind the builder screen, with his conversation; fresh starts a new session
